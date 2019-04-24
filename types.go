@@ -39,8 +39,9 @@ const (
 	RoleAppUser  = Role("appUser")
 	RoleAppMaker = Role("appMaker")
 
-	TriggerMessageAppUser  = "message:appUser"
-	TriggerMessageAppMaker = "message:appMaker"
+	TriggerMessageAppUser         = "message:appUser"
+	TriggerMessageAppMaker        = "message:appMaker"
+	TriggerMessageDeliveryFailure = "message:delivery:failure"
 
 	ImageRatioHorizontal = ImageRatio("horizontal")
 	ImageRatioSquare     = ImageRatio("square")
@@ -58,26 +59,67 @@ type ActionType string
 type Size string
 
 type Payload struct {
-	Trigger      string       `json:"trigger,omitempty"`
-	App          Application  `json:"app,omitempty"`
-	Messages     []*Message   `json:"messages,omitempty"`
-	AppUser      AppUser      `json:"appUser,omitempty"`
-	Conversation Conversation `json:"conversation,omitempty"`
-	Version      string       `json:"version,omitempty"`
+	Trigger      string             `json:"trigger,omitempty"`
+	App          Application        `json:"app,omitempty"`
+	Messages     []*Message         `json:"messages,omitempty"`
+	AppUser      AppUser            `json:"appUser,omitempty"`
+	Conversation Conversation       `json:"conversation,omitempty"`
+	Destination  *SourceDestination `json:"destination,omitempty"`
+	IsFinalEvent bool               `json:"isFinalEvent"`
+	Message      *TruncatedMessage  `json:"message,omitempty"`
+	Error        *Error             `json:"error,omitempty"`
+	Version      string             `json:"version,omitempty"`
+}
+
+type TruncatedMessage struct {
+	ID string `json:"_id"`
+}
+
+type Error struct {
+	Code            string                 `json:"code"`
+	UnderlyingError map[string]interface{} `json:"underlyingError"`
+	Message         string                 `json:"message"`
 }
 
 type Application struct {
 	ID string `json:"_id,omitempty"`
 }
 
-type Source struct {
-	Type string `json:"type,omitempty"`
+type SourceDestination struct {
+	Type              string `json:"type,omitempty"`
+	Id                string `json:"id,omitempty"`
+	IntegrationId     string `json:"integrationId,omitempty"`
+	OriginalMessageId string `json:"originalMessageId,omitempty"`
 }
 
 type AppUser struct {
-	ID                  string `json:"_id,omitempty"`
-	UserID              string `json:"userId,omitempty"`
-	ConversationStarted bool   `json:"conversationStarted,omitempty"`
+	ID                  string                 `json:"_id,omitempty"`
+	UserID              string                 `json:"userId,omitempty"`
+	Properties          map[string]interface{} `json:"properties,omitempty"`
+	SignedUpAt          time.Time              `json:"signedUpAt,omitempty"`
+	Clients             []*AppUserClient       `json:"clients,omitempty"`
+	PendingClients      []*AppUserClient       `json:"pendingClients,omitempty"`
+	ConversationStarted bool                   `json:"conversationStarted"`
+	Email               string                 `json:"email,omitempty"`
+	GivenName           string                 `json:"givenName,omitempty"`
+	Surname             string                 `json:"surname,omitempty"`
+}
+
+type AppUserClient struct {
+	ID            string                 `json:"_id,omitempty"`
+	Platform      string                 `json:"platform,omitempty"`
+	IntegrationId string                 `json:"integrationId,omitempty"`
+	Primary       bool                   `json:"primary"`
+	Active        bool                   `json:"active"`
+	DeviceID      string                 `json:"deviceId,omitempty"`
+	DisplayName   string                 `json:"displayName,omitempty"`
+	AvatarUrl     string                 `json:"avatarUrl,omitempty"`
+	Info          map[string]interface{} `json:"info,omitempty"`
+	Raw           map[string]interface{} `json:"raw,omitempty"`
+	AppVersion    string                 `json:"appVersion,omitempty"`
+	LastSeen      time.Time              `json:"lastSeen,omitempty"`
+	LinkedAt      time.Time              `json:"linkedAt,omitempty"`
+	Blocked       bool                   `json:"blocked"`
 }
 
 type Conversation struct {
@@ -116,7 +158,7 @@ type Message struct {
 	AuthorID        string                 `json:"authorId,omitempty"`
 	Name            string                 `json:"name,omitempty"`
 	Received        time.Time              `json:"received,omitempty"`
-	Source          *Source                `json:"source,omitempty"`
+	Source          *SourceDestination     `json:"source,omitempty"`
 	MediaUrl        string                 `json:"mediaUrl,omitempty"`
 	Actions         []*Action              `json:"actions,omitempty"`
 	Items           []*Item                `json:"items,omitempty"`
@@ -187,4 +229,8 @@ type ResponsePayload struct {
 	Message       *Message      `json:"message,omitempty"`
 	ExtraMessages []*Message    `json:"extraMessages,omitempty"`
 	Conversation  *Conversation `json:"conversation,omitempty"`
+}
+
+type GetAppUserResponse struct {
+	AppUser *AppUser `json:"appUser,omitempty"`
 }

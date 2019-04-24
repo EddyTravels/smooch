@@ -44,6 +44,7 @@ type Client interface {
 	AddWebhookEventHandler(handler WebhookEventHandler)
 	Send(userID string, message *Message) (*ResponsePayload, error)
 	VerifyRequest(r *http.Request) bool
+	GetAppUser(userID string) (*AppUser, error)
 }
 
 type smoochClient struct {
@@ -110,6 +111,65 @@ func (sc *smoochClient) Handler() http.Handler {
 	return sc.mux
 }
 
+func (sc *smoochClient) AddWebhookEventHandler(handler WebhookEventHandler) {
+	sc.webhookEventHandlers = append(sc.webhookEventHandlers, handler)
+}
+
+func (sc *smoochClient) Send(userID string, message *Message) (*ResponsePayload, error) {
+	if userID == "" {
+		return nil, ErrUserIDEmpty
+	}
+
+	if message == nil {
+		return nil, ErrMessageNil
+	}
+
+	if message.Role == "" {
+		return nil, ErrMessageRoleEmpty
+	}
+
+	if message.Type == "" {
+		return nil, ErrMessageTypeEmpty
+	}
+
+	url := sc.getURL(
+		fmt.Sprintf("/v1.1/apps/%s/appusers/%s/messages", sc.appID, userID),
+	)
+
+	buf := new(bytes.Buffer)
+	err := json.NewEncoder(buf).Encode(message)
+	if err != nil {
+		return nil, err
+	}
+
+	var responsePayload ResponsePayload
+	err = sc.sendRequest(http.MethodPost, url, buf, &responsePayload)
+	if err != nil {
+		return nil, err
+	}
+
+	return &responsePayload, nil
+}
+
+func (sc *smoochClient) VerifyRequest(r *http.Request) bool {
+	givenSecret := r.Header.Get("X-Api-Key")
+	return sc.verifySecret == givenSecret
+}
+
+func (sc *smoochClient) GetAppUser(userID string) (*AppUser, error) {
+	url := sc.getURL(
+		fmt.Sprintf("/v1.1/apps/%s/appusers/%s", sc.appID, userID),
+	)
+
+	var response GetAppUserResponse
+	err := sc.sendRequest(http.MethodGet, url, nil, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return response.AppUser, nil
+}
+
 func (sc *smoochClient) handle(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if r.Method != http.MethodPost || !sc.VerifyRequest(r) {
@@ -143,10 +203,6 @@ func (sc *smoochClient) dispatch(p *Payload) {
 	}
 }
 
-func (sc *smoochClient) AddWebhookEventHandler(handler WebhookEventHandler) {
-	sc.webhookEventHandlers = append(sc.webhookEventHandlers, handler)
-}
-
 func (sc *smoochClient) getURL(endpoint string) string {
 	rootURL := usRootURL
 	if sc.region == RegionEU {
@@ -155,59 +211,33 @@ func (sc *smoochClient) getURL(endpoint string) string {
 	return fmt.Sprintf("%s%s", rootURL, endpoint)
 }
 
-func (sc *smoochClient) Send(userID string, message *Message) (*ResponsePayload, error) {
-	if userID == "" {
-		return nil, ErrUserIDEmpty
+func (sc *smoochClient) sendRequest(method string, url string, buf *bytes.Buffer, v interface{}) error {
+	var req *http.Request
+	var err error
+	if buf == nil {
+		req, err = http.NewRequest(http.MethodPost, url, nil)
+	} else {
+		req, err = http.NewRequest(http.MethodPost, url, buf)
 	}
-
-	if message == nil {
-		return nil, ErrMessageNil
-	}
-
-	if message.Role == "" {
-		return nil, ErrMessageRoleEmpty
-	}
-
-	if message.Type == "" {
-		return nil, ErrMessageTypeEmpty
-	}
-
-	url := sc.getURL(
-		fmt.Sprintf("/v1.1/apps/%s/appusers/%s/messages", sc.appID, userID),
-	)
-
-	buf := new(bytes.Buffer)
-	err := json.NewEncoder(buf).Encode(message)
 	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, url, buf)
-	if err != nil {
-		return nil, err
+		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", sc.jwtToken))
 
 	response, err := sc.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer response.Body.Close()
 
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
-		var responsePayload ResponsePayload
-		err := json.NewDecoder(response.Body).Decode(&responsePayload)
+		err := json.NewDecoder(response.Body).Decode(&v)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
-		return &responsePayload, nil
+		return nil
 	}
-	return nil, checkSmoochError(response)
-}
-
-func (sc *smoochClient) VerifyRequest(r *http.Request) bool {
-	givenSecret := r.Header.Get("X-Api-Key")
-	return sc.verifySecret == givenSecret
+	return checkSmoochError(response)
 }
