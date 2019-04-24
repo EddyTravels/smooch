@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"time"
 
 	"testing"
 
@@ -113,6 +114,61 @@ var (
 		},
 		"version": "v1.1"
 	}`
+
+	sampleGetUserJson = `
+	{
+		"appUser": {
+			"_id": "7494535bff5cef41a15be74d",
+			"userId": "steveb@channel5.com",
+			"givenName": "Steve",
+			"signedUpAt": "2019-01-14T18:55:12.515Z",
+			"hasPaymentInfo": false,
+			"conversationStarted": false,
+			"clients": [
+				{
+					"_id": "5c93cb748f63db54ff3b51dd",
+					"lastSeen": "2019-01-14T16:55:59.364Z",
+					"platform": "ios",
+					"id": "F272EB80-D512-4C19-9AC0-BD259DAEAD91",
+					"deviceId": "F272EB80-D512-4C19-9AC0-BD259DAEAD91",
+					"pushNotificationToken": "<0cfc626c 9fed1e3d e9fcb139 e6590cb3 3462f3c8 afd47000 6af2003f 2e3a72a9>",
+					"appVersion": "1.0",
+					"info": {
+						"appId": "com.rp.ShellApp",
+						"carrier": "Rogers",
+						"buildNumber": "1.0",
+						"devicePlatform": "iPhone8,4",
+						"installer": "Dev",
+						"sdkVersion": "6.11.2",
+						"osVersion": "12.1.2",
+						"appName": "ShellApp",
+						"os": "iOS",
+						"vendor": "smooch"
+					},
+					"raw": {
+						"appId": "com.rp.ShellApp",
+						"carrier": "Rogers",
+						"buildNumber": "1.0",
+						"devicePlatform": "iPhone8,4",
+						"installer": "Dev",
+						"sdkVersion": "6.11.2",
+						"osVersion": "12.1.2",
+						"appName": "ShellApp",
+						"os": "iOS",
+						"vendor": "smooch"
+					},
+					"active": true,
+					"primary": false,
+					"integrationId": "599ad41e49db6e243ad77d2f"
+				}
+			],
+			"pendingClients": [],
+			"properties": {
+				"favoriteFood": "prizza"
+			}
+		}
+	}
+	`
 )
 
 type RoundTripFunc func(req *http.Request) *http.Response
@@ -298,4 +354,33 @@ func TestVerifyRequest(t *testing.T) {
 	}
 	assert.NoError(t, err)
 	assert.True(t, sc.VerifyRequest(r))
+}
+
+func TestGetAppUser(t *testing.T) {
+	fn := func(req *http.Request) *http.Response {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       ioutil.NopCloser(bytes.NewReader([]byte(sampleGetUserJson))),
+		}
+	}
+
+	sc, err := New(Options{
+		VerifySecret: "very-secure-test-secret",
+		HttpClient:   NewTestClient(fn),
+	})
+	assert.NoError(t, err)
+
+	appUser, err := sc.GetAppUser("123")
+	assert.NotNil(t, appUser)
+	assert.NoError(t, err)
+
+	assert.Equal(t, "7494535bff5cef41a15be74d", appUser.ID)
+	assert.Equal(t, "steveb@channel5.com", appUser.UserID)
+	assert.Equal(t, "Steve", appUser.GivenName)
+	assert.Equal(t, "2019-01-14T18:55:12Z", appUser.SignedUpAt.Format(time.RFC3339))
+	assert.False(t, appUser.ConversationStarted)
+	assert.Equal(t, 1, len(appUser.Clients))
+	assert.Equal(t, "5c93cb748f63db54ff3b51dd", appUser.Clients[0].ID)
+	assert.Equal(t, "2019-01-14T16:55:59Z", appUser.Clients[0].LastSeen.Format(time.RFC3339))
+	assert.Equal(t, 0, len(appUser.PendingClients))
 }
