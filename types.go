@@ -42,6 +42,8 @@ const (
 	TriggerMessageAppUser         = "message:appUser"
 	TriggerMessageAppMaker        = "message:appMaker"
 	TriggerMessageDeliveryFailure = "message:delivery:failure"
+	TriggerMessageDeliveryChannel = "message:delivery:channel"
+	TriggerMessageDeliveryUser    = "message:delivery:user"
 
 	ImageRatioHorizontal = ImageRatio("horizontal")
 	ImageRatioSquare     = ImageRatio("square")
