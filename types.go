@@ -35,6 +35,7 @@ const (
 	SourceTypeLine      = "line"
 	SourceTypeTwilio    = "twilio"
 	SourceTypeApi       = "api"
+	SourceTypeWhatsApp  = "whatsapp"
 
 	RoleAppUser  = Role("appUser")
 	RoleAppMaker = Role("appMaker")
@@ -149,7 +150,7 @@ type Item struct {
 	Size        Size      `json:"size,omitempty"`
 	MediaURL    string    `json:"mediaUrl,omitempty"`
 	MediaType   string    `json:"mediaType,omitempty"`
-	Actions     []*Action `json:"actions,omitempty"`
+	Actions     []*Action `json:"actions"`
 }
 
 type Message struct {
