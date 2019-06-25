@@ -196,6 +196,9 @@ func TestGenerateJWT(t *testing.T) {
 
 func TestSendOKResponse(t *testing.T) {
 	fn := func(req *http.Request) *http.Response {
+
+		assert.Equal(t, http.MethodPost, req.Method)
+
 		return &http.Response{
 			StatusCode: http.StatusCreated,
 			Body:       ioutil.NopCloser(bytes.NewReader([]byte(sampleResponse))),
@@ -258,6 +261,9 @@ func TestSendErrorResponse(t *testing.T) {
 	}`
 
 	fn := func(req *http.Request) *http.Response {
+
+		assert.Equal(t, http.MethodPost, req.Method)
+
 		return &http.Response{
 			StatusCode: http.StatusUnauthorized,
 			Body:       ioutil.NopCloser(bytes.NewReader([]byte(errorResponseJson))),
@@ -358,6 +364,9 @@ func TestVerifyRequest(t *testing.T) {
 
 func TestGetAppUser(t *testing.T) {
 	fn := func(req *http.Request) *http.Response {
+
+		assert.Equal(t, http.MethodGet, req.Method)
+
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Body:       ioutil.NopCloser(bytes.NewReader([]byte(sampleGetUserJson))),

@@ -215,9 +215,9 @@ func (sc *smoochClient) sendRequest(method string, url string, buf *bytes.Buffer
 	var req *http.Request
 	var err error
 	if buf == nil {
-		req, err = http.NewRequest(http.MethodPost, url, nil)
+		req, err = http.NewRequest(method, url, nil)
 	} else {
-		req, err = http.NewRequest(http.MethodPost, url, buf)
+		req, err = http.NewRequest(method, url, buf)
 	}
 	if err != nil {
 		return err
