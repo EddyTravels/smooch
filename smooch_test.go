@@ -3,13 +3,20 @@ package smooch
 import (
 	"bytes"
 	"io/ioutil"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"time"
 
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+)
+
+const (
+	expectedAuthorizationHeader = "Bearer eyJhbGciOiJIUzI1NiIsImtpZCI6IiIsInR5cCI6IkpXVCJ9.eyJzY29wZSI6ImFwcCJ9.7kM24dZwAi7udpbjJfUmgjJlrueMkq7GPZPbQH-u6GU"
 )
 
 var (
@@ -169,6 +176,12 @@ var (
 		}
 	}
 	`
+
+	sampleUploadAttachmentJson = `
+	{
+		"mediaUrl": "https://media.smooch.io/conversation/c7f6e6d6c3a637261bd9656f/a77caae4cbbd263a0938eba00016b7c8/test.png",
+		"mediaType": "image/png"
+	}`
 )
 
 type RoundTripFunc func(req *http.Request) *http.Response
@@ -198,6 +211,8 @@ func TestSendOKResponse(t *testing.T) {
 	fn := func(req *http.Request) *http.Response {
 
 		assert.Equal(t, http.MethodPost, req.Method)
+		assert.Equal(t, "application/json", req.Header.Get(contentTypeHeaderKey))
+		assert.Equal(t, expectedAuthorizationHeader, req.Header.Get(authorizationHeaderKey))
 
 		return &http.Response{
 			StatusCode: http.StatusCreated,
@@ -263,6 +278,8 @@ func TestSendErrorResponse(t *testing.T) {
 	fn := func(req *http.Request) *http.Response {
 
 		assert.Equal(t, http.MethodPost, req.Method)
+		assert.Equal(t, "application/json", req.Header.Get(contentTypeHeaderKey))
+		assert.Equal(t, expectedAuthorizationHeader, req.Header.Get(authorizationHeaderKey))
 
 		return &http.Response{
 			StatusCode: http.StatusUnauthorized,
@@ -366,6 +383,8 @@ func TestGetAppUser(t *testing.T) {
 	fn := func(req *http.Request) *http.Response {
 
 		assert.Equal(t, http.MethodGet, req.Method)
+		assert.Equal(t, "application/json", req.Header.Get(contentTypeHeaderKey))
+		assert.Equal(t, expectedAuthorizationHeader, req.Header.Get(authorizationHeaderKey))
 
 		return &http.Response{
 			StatusCode: http.StatusOK,
@@ -392,4 +411,86 @@ func TestGetAppUser(t *testing.T) {
 	assert.Equal(t, "5c93cb748f63db54ff3b51dd", appUser.Clients[0].ID)
 	assert.Equal(t, "2019-01-14T16:55:59Z", appUser.Clients[0].LastSeen.Format(time.RFC3339))
 	assert.Equal(t, 0, len(appUser.PendingClients))
+}
+
+func TestUploadAttachment(t *testing.T) {
+
+	fn := func(req *http.Request) *http.Response {
+
+		assert.Equal(t, http.MethodPost, req.Method)
+		assert.True(t, strings.HasPrefix(req.Header.Get(contentTypeHeaderKey), "multipart/form-data; boundary="))
+		assert.Equal(t, expectedAuthorizationHeader, req.Header.Get(authorizationHeaderKey))
+
+		assert.Equal(t, "https://api.smooch.io/v1.1/apps/attachments?access=public", req.URL.String())
+		assert.Equal(t, "public", req.URL.Query().Get("access"))
+		assert.Equal(t, "", req.URL.Query().Get("for"))
+		assert.Equal(t, "", req.URL.Query().Get("appUserId"))
+		assert.Equal(t, "", req.URL.Query().Get("userId"))
+
+		mediaType, params, err := mime.ParseMediaType(req.Header.Get("Content-Type"))
+		assert.NoError(t, err)
+		assert.Equal(t, "multipart/form-data", mediaType)
+		assert.Contains(t, params, "boundary")
+
+		mr := multipart.NewReader(req.Body, params["boundary"])
+		form, err := mr.ReadForm(20000000)
+		assert.NotNil(t, form)
+		assert.NoError(t, err)
+
+		assert.Equal(t, "image/png", form.Value["type"][0])
+		assert.Equal(t, "fixtures/smooch.png", form.File["source"][0].Filename)
+		assert.Equal(t, int64(5834), form.File["source"][0].Size)
+
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       ioutil.NopCloser(bytes.NewReader([]byte(sampleUploadAttachmentJson))),
+		}
+	}
+
+	sc, err := New(Options{
+		VerifySecret: "very-secure-test-secret",
+		HttpClient:   NewTestClient(fn),
+	})
+	assert.NoError(t, err)
+
+	r, err := sc.UploadFileAttachment("fixtures/smooch.png", NewAttachmentUpload("image/png"))
+	assert.NotNil(t, r)
+	assert.NoError(t, err)
+
+	assert.Equal(t, "image/png", r.MediaType)
+	assert.Equal(t,
+		"https://media.smooch.io/conversation/c7f6e6d6c3a637261bd9656f/a77caae4cbbd263a0938eba00016b7c8/test.png",
+		r.MediaURL,
+	)
+
+	r, err = sc.UploadFileAttachment("fixtures/smooch-not-exists.png", NewAttachmentUpload("image/png"))
+	assert.Nil(t, r)
+	assert.Error(t, err)
+}
+
+func TestDeleteAttachment(t *testing.T) {
+
+	fn := func(req *http.Request) *http.Response {
+
+		assert.Equal(t, http.MethodPost, req.Method)
+		assert.Equal(t, "application/json", req.Header.Get(contentTypeHeaderKey))
+		assert.Equal(t, expectedAuthorizationHeader, req.Header.Get(authorizationHeaderKey))
+
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       ioutil.NopCloser(bytes.NewReader([]byte("{}"))),
+		}
+	}
+
+	sc, err := New(Options{
+		VerifySecret: "very-secure-test-secret",
+		HttpClient:   NewTestClient(fn),
+	})
+	assert.NoError(t, err)
+
+	err = sc.DeleteAttachment(&Attachment{
+		MediaURL:  "https://media.smooch.io/conversation/c7f6e6d6c3a637261bd9656f/a77caae4cbbd263a0938eba00016b7c8/test.png",
+		MediaType: "",
+	})
+	assert.NoError(t, err)
 }

@@ -1,6 +1,7 @@
 package smooch
 
 import (
+	"bytes"
 	"encoding/json"
 	"time"
 )
@@ -116,7 +117,7 @@ type AppUserClient struct {
 	Active        bool                   `json:"active"`
 	DeviceID      string                 `json:"deviceId,omitempty"`
 	DisplayName   string                 `json:"displayName,omitempty"`
-	AvatarUrl     string                 `json:"avatarUrl,omitempty"`
+	AvatarURL     string                 `json:"avatarUrl,omitempty"`
 	Info          map[string]interface{} `json:"info,omitempty"`
 	Raw           map[string]interface{} `json:"raw,omitempty"`
 	AppVersion    string                 `json:"appVersion,omitempty"`
@@ -162,7 +163,7 @@ type Message struct {
 	Name            string                 `json:"name,omitempty"`
 	Received        time.Time              `json:"received,omitempty"`
 	Source          *SourceDestination     `json:"source,omitempty"`
-	MediaUrl        string                 `json:"mediaUrl,omitempty"`
+	MediaURL        string                 `json:"mediaUrl,omitempty"`
 	Actions         []*Action              `json:"actions,omitempty"`
 	Items           []*Item                `json:"items,omitempty"`
 	Metadata        map[string]interface{} `json:"metadata,omitempty"`
@@ -236,4 +237,39 @@ type ResponsePayload struct {
 
 type GetAppUserResponse struct {
 	AppUser *AppUser `json:"appUser,omitempty"`
+}
+
+type AttachmentUpload struct {
+	MIMEType string
+	Access   string
+
+	// optionals
+	For       string
+	AppUserID string
+	UserID    string
+}
+
+func NewAttachmentUpload(mime string) AttachmentUpload {
+	return AttachmentUpload{
+		MIMEType: mime,
+		Access:   "public",
+	}
+}
+
+type Attachment struct {
+	MediaURL  string `json:"mediaUrl"`
+	MediaType string `json:"mediaType,omitempty"`
+}
+
+type BytesFileReader struct {
+	*bytes.Reader
+	Filename string
+}
+
+func NewBytesFileReader(filename string, b []byte) *BytesFileReader {
+	r := bytes.NewReader(b)
+	return &BytesFileReader{
+		Reader:   r,
+		Filename: filename,
+	}
 }
