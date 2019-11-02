@@ -17,6 +17,8 @@ import (
 
 var (
 	ErrUserIDEmpty       = errors.New("user id is empty")
+	ErrKeyIDEmpty        = errors.New("key id is empty")
+	ErrSecretEmpty       = errors.New("secret is empty")
 	ErrMessageNil        = errors.New("message is nil")
 	ErrMessageRoleEmpty  = errors.New("message.Role is empty")
 	ErrMessageTypeEmpty  = errors.New("message.Type is empty")
@@ -52,6 +54,7 @@ type WebhookEventHandler func(payload *Payload)
 
 type Client interface {
 	Handler() http.Handler
+	IsJWTExpired() (bool, error)
 	AddWebhookEventHandler(handler WebhookEventHandler)
 	Send(userID string, message *Message) (*ResponsePayload, error)
 	VerifyRequest(r *http.Request) bool
@@ -63,6 +66,8 @@ type Client interface {
 type smoochClient struct {
 	mux                  *http.ServeMux
 	appID                string
+	keyID                string
+	secret               string
 	jwtToken             string
 	verifySecret         string
 	logger               Logger
@@ -72,6 +77,14 @@ type smoochClient struct {
 }
 
 func New(o Options) (*smoochClient, error) {
+	if o.KeyID == "" {
+		return nil, ErrKeyIDEmpty
+	}
+
+	if o.Secret == "" {
+		return nil, ErrSecretEmpty
+	}
+
 	if o.VerifySecret == "" {
 		return nil, ErrVerifySecretEmpty
 	}
@@ -109,6 +122,8 @@ func New(o Options) (*smoochClient, error) {
 	sc := &smoochClient{
 		mux:          o.Mux,
 		appID:        o.AppID,
+		keyID:        o.KeyID,
+		secret:       o.Secret,
 		verifySecret: o.VerifySecret,
 		logger:       o.Logger,
 		region:       region,
@@ -122,6 +137,11 @@ func New(o Options) (*smoochClient, error) {
 
 func (sc *smoochClient) Handler() http.Handler {
 	return sc.mux
+}
+
+// IsJWTExpired will check whether Smooch JWT is expired or not.
+func (sc *smoochClient) IsJWTExpired() (bool, error) {
+	return isJWTExpired(sc.jwtToken, sc.secret)
 }
 
 func (sc *smoochClient) AddWebhookEventHandler(handler WebhookEventHandler) {
