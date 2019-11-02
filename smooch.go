@@ -13,10 +13,13 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 )
 
 var (
 	ErrUserIDEmpty       = errors.New("user id is empty")
+	ErrKeyIDEmpty        = errors.New("key id is empty")
+	ErrSecretEmpty       = errors.New("secret is empty")
 	ErrMessageNil        = errors.New("message is nil")
 	ErrMessageRoleEmpty  = errors.New("message.Role is empty")
 	ErrMessageTypeEmpty  = errors.New("message.Type is empty")
@@ -52,6 +55,8 @@ type WebhookEventHandler func(payload *Payload)
 
 type Client interface {
 	Handler() http.Handler
+	IsJWTExpired() (bool, error)
+	RenewToken() (string, error)
 	AddWebhookEventHandler(handler WebhookEventHandler)
 	Send(userID string, message *Message) (*ResponsePayload, error)
 	VerifyRequest(r *http.Request) bool
@@ -63,15 +68,26 @@ type Client interface {
 type smoochClient struct {
 	mux                  *http.ServeMux
 	appID                string
+	keyID                string
+	secret               string
 	jwtToken             string
 	verifySecret         string
 	logger               Logger
 	region               string
 	webhookEventHandlers []WebhookEventHandler
 	httpClient           *http.Client
+	mtx                  sync.Mutex
 }
 
 func New(o Options) (*smoochClient, error) {
+	if o.KeyID == "" {
+		return nil, ErrKeyIDEmpty
+	}
+
+	if o.Secret == "" {
+		return nil, ErrSecretEmpty
+	}
+
 	if o.VerifySecret == "" {
 		return nil, ErrVerifySecretEmpty
 	}
@@ -109,6 +125,8 @@ func New(o Options) (*smoochClient, error) {
 	sc := &smoochClient{
 		mux:          o.Mux,
 		appID:        o.AppID,
+		keyID:        o.KeyID,
+		secret:       o.Secret,
 		verifySecret: o.VerifySecret,
 		logger:       o.Logger,
 		region:       region,
@@ -122,6 +140,25 @@ func New(o Options) (*smoochClient, error) {
 
 func (sc *smoochClient) Handler() http.Handler {
 	return sc.mux
+}
+
+// IsJWTExpired will check whether Smooch JWT is expired or not.
+func (sc *smoochClient) IsJWTExpired() (bool, error) {
+	return isJWTExpired(sc.jwtToken, sc.secret)
+}
+
+// RenewToken will generate new Smooch JWT token.
+func (sc *smoochClient) RenewToken() (string, error) {
+	sc.mtx.Lock()
+	defer sc.mtx.Unlock()
+
+	jwtToken, err := GenerateJWT("app", sc.keyID, sc.secret)
+	if err != nil {
+		return "", err
+	}
+
+	sc.jwtToken = jwtToken
+	return jwtToken, nil
 }
 
 func (sc *smoochClient) AddWebhookEventHandler(handler WebhookEventHandler) {
