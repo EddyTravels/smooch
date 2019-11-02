@@ -13,6 +13,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 )
 
 var (
@@ -55,6 +56,7 @@ type WebhookEventHandler func(payload *Payload)
 type Client interface {
 	Handler() http.Handler
 	IsJWTExpired() (bool, error)
+	RenewToken() (string, error)
 	AddWebhookEventHandler(handler WebhookEventHandler)
 	Send(userID string, message *Message) (*ResponsePayload, error)
 	VerifyRequest(r *http.Request) bool
@@ -74,6 +76,7 @@ type smoochClient struct {
 	region               string
 	webhookEventHandlers []WebhookEventHandler
 	httpClient           *http.Client
+	mtx                  sync.Mutex
 }
 
 func New(o Options) (*smoochClient, error) {
@@ -142,6 +145,20 @@ func (sc *smoochClient) Handler() http.Handler {
 // IsJWTExpired will check whether Smooch JWT is expired or not.
 func (sc *smoochClient) IsJWTExpired() (bool, error) {
 	return isJWTExpired(sc.jwtToken, sc.secret)
+}
+
+// RenewToken will generate new Smooch JWT token.
+func (sc *smoochClient) RenewToken() (string, error) {
+	sc.mtx.Lock()
+	defer sc.mtx.Unlock()
+
+	jwtToken, err := GenerateJWT("app", sc.keyID, sc.secret)
+	if err != nil {
+		return "", err
+	}
+
+	sc.jwtToken = jwtToken
+	return jwtToken, nil
 }
 
 func (sc *smoochClient) AddWebhookEventHandler(handler WebhookEventHandler) {
