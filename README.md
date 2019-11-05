@@ -2,6 +2,12 @@
 
 This is a Go library for making bots with Smooch service.
 
+_**Note** : This a modified version version of [EddyTravels/smooch](https://github.com/EddyTravels/smooch) library with additional features. Please refer to the original repo for the original features._
+
+## Additional Feature
+
+- Redis support as a centralized storage to store JWT token for supporting autoscaling environment.
+
 ## Tips
 
 Smooch documentation: https://docs.smooch.io/rest/
@@ -9,7 +15,7 @@ Smooch documentation: https://docs.smooch.io/rest/
 ## Installing
 
 ```
-$ go get -u github.com/EddyTravels/smooch
+$ go get -u github.com/kitabisa/smooch
 ```
 
 ## Example
@@ -18,7 +24,7 @@ $ go get -u github.com/EddyTravels/smooch
 import (
 	"os"
 
-	"github.com/EddyTravels/smooch"
+	"github.com/kitabisa/smooch"
 )
 
 func main() {
