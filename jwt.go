@@ -1,12 +1,18 @@
 package smooch
 
 import (
+	"time"
+
 	jwt "github.com/dgrijalva/jwt-go"
 )
+
+// JWTExpiration defines how many seconds jwt token is valid
+const JWTExpiration = 3600
 
 func GenerateJWT(scope string, keyID string, secret string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"scope": scope,
+		"exp":   JWTExpiration,
 	})
 	token.Header = map[string]interface{}{
 		"alg": "HS256",
@@ -19,7 +25,17 @@ func GenerateJWT(scope string, keyID string, secret string) (string, error) {
 
 // getJWTExpiration will get jwt expiration time
 func getJWTExpiration(jwtToken string, secret string) (int64, error) {
-	// TODO ....
+	claims := jwt.MapClaims{}
+
+	_, err := jwt.ParseWithClaims(jwtToken, &claims, func(t *jwt.Token) (interface{}, error) {
+		return []byte(secret), nil
+	})
+	if err != nil {
+		return -1, err
+	}
+
+	expiredIn := claims["exp"].(int64) - time.Now().Unix()
+	return expiredIn, nil
 }
 
 // isJWTExpired will check whether Smooch JWT is expired or not.

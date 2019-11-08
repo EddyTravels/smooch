@@ -35,6 +35,7 @@ func main() {
         KeyID:        os.Getenv("SMOOCH_KEY_ID"),
         Secret:       os.Getenv("SMOOCH_SECRET"),
         VerifySecret: os.Getenv("SMOOCH_VERIFY_SECRET"),
+        RedisPool:    redisPool,
     })
 
     if err != nil {
