@@ -6,7 +6,9 @@ _**Note** : This a modified version version of [EddyTravels/smooch](https://gith
 
 ## Additional Feature
 
-- Redis support as a centralized storage to store JWT token for supporting autoscaling environment.
+- Token expiration & its checking.
+- Renew token functionality whenever token is expired.
+- Redis support as a centralized storage to store JWT token for supporting autoscaling environment. Use redigo as redis library.
 
 ## Tips
 

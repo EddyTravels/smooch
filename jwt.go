@@ -17,6 +17,11 @@ func GenerateJWT(scope string, keyID string, secret string) (string, error) {
 	return token.SignedString([]byte(secret))
 }
 
+// getJWTExpiration will get jwt expiration time
+func getJWTExpiration(jwtToken string, secret string) (int64, error) {
+	// TODO ....
+}
+
 // isJWTExpired will check whether Smooch JWT is expired or not.
 func isJWTExpired(jwtToken string, secret string) (bool, error) {
 	_, err := jwt.ParseWithClaims(jwtToken, jwt.MapClaims{}, func(t *jwt.Token) (interface{}, error) {

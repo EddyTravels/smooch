@@ -14,12 +14,16 @@ import (
 	"path"
 	"strings"
 	"sync"
+
+	"github.com/gomodule/redigo/redis"
+	"github.com/kitabisa/smooch/storage"
 )
 
 var (
 	ErrUserIDEmpty       = errors.New("user id is empty")
 	ErrKeyIDEmpty        = errors.New("key id is empty")
 	ErrSecretEmpty       = errors.New("secret is empty")
+	ErrRedisNil          = errors.New("redis pool is nil")
 	ErrMessageNil        = errors.New("message is nil")
 	ErrMessageRoleEmpty  = errors.New("message.Role is empty")
 	ErrMessageTypeEmpty  = errors.New("message.Type is empty")
@@ -49,6 +53,7 @@ type Options struct {
 	Logger       Logger
 	Region       string
 	HttpClient   *http.Client
+	RedisPool    *redis.Pool
 }
 
 type WebhookEventHandler func(payload *Payload)
@@ -70,13 +75,13 @@ type smoochClient struct {
 	appID                string
 	keyID                string
 	secret               string
-	jwtToken             string
 	verifySecret         string
 	logger               Logger
 	region               string
 	webhookEventHandlers []WebhookEventHandler
 	httpClient           *http.Client
 	mtx                  sync.Mutex
+	redisPool            *redis.Pool
 }
 
 func New(o Options) (*smoochClient, error) {
@@ -90,6 +95,10 @@ func New(o Options) (*smoochClient, error) {
 
 	if o.VerifySecret == "" {
 		return nil, ErrVerifySecretEmpty
+	}
+
+	if o.RedisPool == nil {
+		return nil, ErrRedisNil
 	}
 
 	if o.Mux == nil {
@@ -131,7 +140,18 @@ func New(o Options) (*smoochClient, error) {
 		logger:       o.Logger,
 		region:       region,
 		httpClient:   o.HttpClient,
-		jwtToken:     jwtToken,
+		redisPool:    o.RedisPool,
+	}
+
+	// save token to redis
+	jwtExpiration, err := getJWTExpiration(jwtToken, sc.secret)
+	if err != nil {
+		return nil, err
+	}
+
+	err = storage.SaveTokenToRedis(sc.redisPool, jwtToken, jwtExpiration)
+	if err != nil {
+		return nil, err
 	}
 
 	sc.mux.HandleFunc(o.WebhookURL, sc.handle)
@@ -144,7 +164,14 @@ func (sc *smoochClient) Handler() http.Handler {
 
 // IsJWTExpired will check whether Smooch JWT is expired or not.
 func (sc *smoochClient) IsJWTExpired() (bool, error) {
-	return isJWTExpired(sc.jwtToken, sc.secret)
+	jwtToken, err := storage.GetTokenFromRedis(sc.redisPool)
+	if err != nil {
+		if err == redis.ErrNil {
+			return true, nil
+		}
+		return "", err
+	}
+	return isJWTExpired(jwtToken, sc.secret)
 }
 
 // RenewToken will generate new Smooch JWT token.
@@ -157,7 +184,16 @@ func (sc *smoochClient) RenewToken() (string, error) {
 		return "", err
 	}
 
-	sc.jwtToken = jwtToken
+	jwtExpiration := getJWTExpiration(jwtToken, sc.secret)
+	if err != nil {
+		return "", err
+	}
+
+	err = storage.SaveTokenToRedis(sc.redisPool, jwtToken, jwtExpiration)
+	if err != nil {
+		return "", err
+	}
+
 	return jwtToken, nil
 }
 
