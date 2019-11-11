@@ -139,15 +139,12 @@ func New(o Options) (*smoochClient, error) {
 		RedisStorage: storage.NewRedisStorage(o.RedisPool),
 	}
 
-	jwtToken, err := GenerateJWT("app", o.KeyID, o.Secret)
+	_, err := sc.RedisStorage.GetTokenFromRedis()
 	if err != nil {
-		return nil, err
-	}
-
-	// save token to redis
-	err = sc.RedisStorage.SaveTokenToRedis(jwtToken, JWTExpiration)
-	if err != nil {
-		return nil, err
+		_, err := sc.RenewToken()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	sc.mux.HandleFunc(o.WebhookURL, sc.handle)
@@ -392,6 +389,7 @@ func (sc *smoochClient) createRequest(
 
 	var req *http.Request
 	var err error
+	var jwtToken string
 
 	if header == nil {
 		header = http.Header{}
@@ -401,10 +399,23 @@ func (sc *smoochClient) createRequest(
 		header.Set(contentTypeHeaderKey, contentTypeJSON)
 	}
 
-	jwtToken, err := sc.RedisStorage.GetTokenFromRedis()
+	isExpired, err := sc.IsJWTExpired()
 	if err != nil {
 		return nil, err
 	}
+
+	if isExpired {
+		jwtToken, err = sc.RenewToken()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		jwtToken, err = sc.RedisStorage.GetTokenFromRedis()
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	header.Set(authorizationHeaderKey, fmt.Sprintf("Bearer %s", jwtToken))
 
 	if buf == nil {
