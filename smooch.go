@@ -13,14 +13,22 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
+
+	"github.com/gomodule/redigo/redis"
+	"github.com/kitabisa/smooch/storage"
 )
 
 var (
 	ErrUserIDEmpty       = errors.New("user id is empty")
+	ErrKeyIDEmpty        = errors.New("key id is empty")
+	ErrSecretEmpty       = errors.New("secret is empty")
+	ErrRedisNil          = errors.New("redis pool is nil")
 	ErrMessageNil        = errors.New("message is nil")
 	ErrMessageRoleEmpty  = errors.New("message.Role is empty")
 	ErrMessageTypeEmpty  = errors.New("message.Type is empty")
 	ErrVerifySecretEmpty = errors.New("verify secret is empty")
+	ErrDecodeToken       = errors.New("error decode token")
 )
 
 const (
@@ -46,12 +54,15 @@ type Options struct {
 	Logger       Logger
 	Region       string
 	HttpClient   *http.Client
+	RedisPool    *redis.Pool
 }
 
 type WebhookEventHandler func(payload *Payload)
 
 type Client interface {
 	Handler() http.Handler
+	IsJWTExpired() (bool, error)
+	RenewToken() (string, error)
 	AddWebhookEventHandler(handler WebhookEventHandler)
 	Send(userID string, message *Message) (*ResponsePayload, error)
 	VerifyRequest(r *http.Request) bool
@@ -63,17 +74,32 @@ type Client interface {
 type smoochClient struct {
 	mux                  *http.ServeMux
 	appID                string
-	jwtToken             string
+	keyID                string
+	secret               string
 	verifySecret         string
 	logger               Logger
 	region               string
 	webhookEventHandlers []WebhookEventHandler
 	httpClient           *http.Client
+	mtx                  sync.Mutex
+	RedisStorage         *storage.RedisStorage
 }
 
 func New(o Options) (*smoochClient, error) {
+	if o.KeyID == "" {
+		return nil, ErrKeyIDEmpty
+	}
+
+	if o.Secret == "" {
+		return nil, ErrSecretEmpty
+	}
+
 	if o.VerifySecret == "" {
 		return nil, ErrVerifySecretEmpty
+	}
+
+	if o.RedisPool == nil {
+		return nil, ErrRedisNil
 	}
 
 	if o.Mux == nil {
@@ -101,19 +127,24 @@ func New(o Options) (*smoochClient, error) {
 		region = RegionEU
 	}
 
-	jwtToken, err := GenerateJWT("app", o.KeyID, o.Secret)
-	if err != nil {
-		return nil, err
-	}
-
 	sc := &smoochClient{
 		mux:          o.Mux,
 		appID:        o.AppID,
+		keyID:        o.KeyID,
+		secret:       o.Secret,
 		verifySecret: o.VerifySecret,
 		logger:       o.Logger,
 		region:       region,
 		httpClient:   o.HttpClient,
-		jwtToken:     jwtToken,
+		RedisStorage: storage.NewRedisStorage(o.RedisPool),
+	}
+
+	_, err := sc.RedisStorage.GetTokenFromRedis()
+	if err != nil {
+		_, err := sc.RenewToken()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	sc.mux.HandleFunc(o.WebhookURL, sc.handle)
@@ -122,6 +153,36 @@ func New(o Options) (*smoochClient, error) {
 
 func (sc *smoochClient) Handler() http.Handler {
 	return sc.mux
+}
+
+// IsJWTExpired will check whether Smooch JWT is expired or not.
+func (sc *smoochClient) IsJWTExpired() (bool, error) {
+	jwtToken, err := sc.RedisStorage.GetTokenFromRedis()
+	if err != nil {
+		if err == redis.ErrNil {
+			return true, nil
+		}
+		return false, err
+	}
+	return isJWTExpired(jwtToken, sc.secret)
+}
+
+// RenewToken will generate new Smooch JWT token.
+func (sc *smoochClient) RenewToken() (string, error) {
+	sc.mtx.Lock()
+	defer sc.mtx.Unlock()
+
+	jwtToken, err := GenerateJWT("app", sc.keyID, sc.secret)
+	if err != nil {
+		return "", err
+	}
+
+	err = sc.RedisStorage.SaveTokenToRedis(jwtToken, JWTExpiration)
+	if err != nil {
+		return "", err
+	}
+
+	return jwtToken, nil
 }
 
 func (sc *smoochClient) AddWebhookEventHandler(handler WebhookEventHandler) {
@@ -326,6 +387,10 @@ func (sc *smoochClient) createRequest(
 	buf *bytes.Buffer,
 	header http.Header) (*http.Request, error) {
 
+	var req *http.Request
+	var err error
+	var jwtToken string
+
 	if header == nil {
 		header = http.Header{}
 	}
@@ -333,10 +398,26 @@ func (sc *smoochClient) createRequest(
 	if header.Get(contentTypeHeaderKey) == "" {
 		header.Set(contentTypeHeaderKey, contentTypeJSON)
 	}
-	header.Set(authorizationHeaderKey, fmt.Sprintf("Bearer %s", sc.jwtToken))
 
-	var req *http.Request
-	var err error
+	isExpired, err := sc.IsJWTExpired()
+	if err != nil {
+		return nil, err
+	}
+
+	if isExpired {
+		jwtToken, err = sc.RenewToken()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		jwtToken, err = sc.RedisStorage.GetTokenFromRedis()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	header.Set(authorizationHeaderKey, fmt.Sprintf("Bearer %s", jwtToken))
+
 	if buf == nil {
 		req, err = http.NewRequest(method, url, nil)
 	} else {
