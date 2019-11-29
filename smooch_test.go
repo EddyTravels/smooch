@@ -221,8 +221,7 @@ func TestSendOKResponse(t *testing.T) {
 	}
 
 	sc, err := New(Options{
-		VerifySecret: "very-secure-test-secret",
-		HttpClient:   NewTestClient(fn),
+		HttpClient: NewTestClient(fn),
 	})
 	assert.NoError(t, err)
 
@@ -288,8 +287,7 @@ func TestSendErrorResponse(t *testing.T) {
 	}
 
 	sc, err := New(Options{
-		VerifySecret: "very-secure-test-secret",
-		HttpClient:   NewTestClient(fn),
+		HttpClient: NewTestClient(fn),
 	})
 	assert.NoError(t, err)
 
@@ -310,9 +308,7 @@ func TestSendErrorResponse(t *testing.T) {
 }
 
 func TestHandlerOK(t *testing.T) {
-	sc, err := New(Options{
-		VerifySecret: "very-secure-test-secret",
-	})
+	sc, err := New(Options{})
 	assert.NoError(t, err)
 
 	handlerInvokeCounter := 0
@@ -342,43 +338,6 @@ func TestHandlerOK(t *testing.T) {
 	assert.Equal(t, 2, handlerInvokeCounter)
 }
 
-func TestVerifyRequest(t *testing.T) {
-	sc, err := New(Options{
-		VerifySecret: "very-secure-test-secret",
-	})
-	r := &http.Request{}
-	assert.NoError(t, err)
-	assert.False(t, sc.VerifyRequest(r))
-
-	r = &http.Request{
-		Header: http.Header{},
-	}
-	r.Header.Set("X-Api-Key", "very-secure-test-secret")
-	assert.NoError(t, err)
-	assert.True(t, sc.VerifyRequest(r))
-
-	sc, err = New(Options{
-		VerifySecret: "very-secure-test-secret",
-	})
-	assert.NoError(t, err)
-
-	headers := http.Header{}
-	headers.Set("X-Api-Key", "very-secure-test-secret-wrong")
-	r = &http.Request{
-		Header: headers,
-	}
-	assert.NoError(t, err)
-	assert.False(t, sc.VerifyRequest(r))
-
-	headers = http.Header{}
-	headers.Set("X-Api-Key", "very-secure-test-secret")
-	r = &http.Request{
-		Header: headers,
-	}
-	assert.NoError(t, err)
-	assert.True(t, sc.VerifyRequest(r))
-}
-
 func TestGetAppUser(t *testing.T) {
 	fn := func(req *http.Request) *http.Response {
 
@@ -393,8 +352,7 @@ func TestGetAppUser(t *testing.T) {
 	}
 
 	sc, err := New(Options{
-		VerifySecret: "very-secure-test-secret",
-		HttpClient:   NewTestClient(fn),
+		HttpClient: NewTestClient(fn),
 	})
 	assert.NoError(t, err)
 
@@ -448,8 +406,7 @@ func TestUploadAttachment(t *testing.T) {
 	}
 
 	sc, err := New(Options{
-		VerifySecret: "very-secure-test-secret",
-		HttpClient:   NewTestClient(fn),
+		HttpClient: NewTestClient(fn),
 	})
 	assert.NoError(t, err)
 
@@ -483,8 +440,7 @@ func TestDeleteAttachment(t *testing.T) {
 	}
 
 	sc, err := New(Options{
-		VerifySecret: "very-secure-test-secret",
-		HttpClient:   NewTestClient(fn),
+		HttpClient: NewTestClient(fn),
 	})
 	assert.NoError(t, err)
 

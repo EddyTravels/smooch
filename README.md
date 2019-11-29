@@ -34,7 +34,6 @@ func main() {
         AppID:        os.Getenv("SMOOCH_APP_ID"),
         KeyID:        os.Getenv("SMOOCH_KEY_ID"),
         Secret:       os.Getenv("SMOOCH_SECRET"),
-        VerifySecret: os.Getenv("SMOOCH_VERIFY_SECRET"),
         RedisPool:    redisPool,
     })
 
