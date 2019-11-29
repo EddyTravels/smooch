@@ -20,15 +20,14 @@ import (
 )
 
 var (
-	ErrUserIDEmpty       = errors.New("user id is empty")
-	ErrKeyIDEmpty        = errors.New("key id is empty")
-	ErrSecretEmpty       = errors.New("secret is empty")
-	ErrRedisNil          = errors.New("redis pool is nil")
-	ErrMessageNil        = errors.New("message is nil")
-	ErrMessageRoleEmpty  = errors.New("message.Role is empty")
-	ErrMessageTypeEmpty  = errors.New("message.Type is empty")
-	ErrVerifySecretEmpty = errors.New("verify secret is empty")
-	ErrDecodeToken       = errors.New("error decode token")
+	ErrUserIDEmpty      = errors.New("user id is empty")
+	ErrKeyIDEmpty       = errors.New("key id is empty")
+	ErrSecretEmpty      = errors.New("secret is empty")
+	ErrRedisNil         = errors.New("redis pool is nil")
+	ErrMessageNil       = errors.New("message is nil")
+	ErrMessageRoleEmpty = errors.New("message.Role is empty")
+	ErrMessageTypeEmpty = errors.New("message.Type is empty")
+	ErrDecodeToken      = errors.New("error decode token")
 )
 
 const (
@@ -45,16 +44,15 @@ const (
 )
 
 type Options struct {
-	AppID        string
-	KeyID        string
-	Secret       string
-	VerifySecret string
-	WebhookURL   string
-	Mux          *http.ServeMux
-	Logger       Logger
-	Region       string
-	HttpClient   *http.Client
-	RedisPool    *redis.Pool
+	AppID      string
+	KeyID      string
+	Secret     string
+	WebhookURL string
+	Mux        *http.ServeMux
+	Logger     Logger
+	Region     string
+	HttpClient *http.Client
+	RedisPool  *redis.Pool
 }
 
 type WebhookEventHandler func(payload *Payload)
@@ -65,7 +63,6 @@ type Client interface {
 	RenewToken() (string, error)
 	AddWebhookEventHandler(handler WebhookEventHandler)
 	Send(userID string, message *Message) (*ResponsePayload, error)
-	VerifyRequest(r *http.Request) bool
 	GetAppUser(userID string) (*AppUser, error)
 	UploadFileAttachment(filepath string, upload AttachmentUpload) (*Attachment, error)
 	UploadAttachment(r io.Reader, upload AttachmentUpload) (*Attachment, error)
@@ -76,7 +73,6 @@ type smoochClient struct {
 	appID                string
 	keyID                string
 	secret               string
-	verifySecret         string
 	logger               Logger
 	region               string
 	webhookEventHandlers []WebhookEventHandler
@@ -92,10 +88,6 @@ func New(o Options) (*smoochClient, error) {
 
 	if o.Secret == "" {
 		return nil, ErrSecretEmpty
-	}
-
-	if o.VerifySecret == "" {
-		return nil, ErrVerifySecretEmpty
 	}
 
 	if o.RedisPool == nil {
@@ -132,7 +124,6 @@ func New(o Options) (*smoochClient, error) {
 		appID:        o.AppID,
 		keyID:        o.KeyID,
 		secret:       o.Secret,
-		verifySecret: o.VerifySecret,
 		logger:       o.Logger,
 		region:       region,
 		httpClient:   o.HttpClient,
@@ -231,11 +222,6 @@ func (sc *smoochClient) Send(userID string, message *Message) (*ResponsePayload,
 	return &responsePayload, nil
 }
 
-func (sc *smoochClient) VerifyRequest(r *http.Request) bool {
-	givenSecret := r.Header.Get("X-Api-Key")
-	return sc.verifySecret == givenSecret
-}
-
 func (sc *smoochClient) GetAppUser(userID string) (*AppUser, error) {
 	url := sc.getURL(
 		fmt.Sprintf("/v1.1/apps/%s/appusers/%s", sc.appID, userID),
@@ -332,7 +318,7 @@ func (sc *smoochClient) DeleteAttachment(attachment *Attachment) error {
 
 func (sc *smoochClient) handle(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	if r.Method != http.MethodPost || !sc.VerifyRequest(r) {
+	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
