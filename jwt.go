@@ -12,7 +12,7 @@ const JWTExpiration = 3600
 func GenerateJWT(scope string, keyID string, secret string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"scope": scope,
-		"exp":   JWTExpiration,
+		"exp":   time.Now().Unix() + JWTExpiration,
 	})
 	token.Header = map[string]interface{}{
 		"alg": "HS256",
