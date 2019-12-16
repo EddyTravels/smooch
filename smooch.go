@@ -20,14 +20,19 @@ import (
 )
 
 var (
-	ErrUserIDEmpty      = errors.New("user id is empty")
-	ErrKeyIDEmpty       = errors.New("key id is empty")
-	ErrSecretEmpty      = errors.New("secret is empty")
-	ErrRedisNil         = errors.New("redis pool is nil")
-	ErrMessageNil       = errors.New("message is nil")
-	ErrMessageRoleEmpty = errors.New("message.Role is empty")
-	ErrMessageTypeEmpty = errors.New("message.Type is empty")
-	ErrDecodeToken      = errors.New("error decode token")
+	ErrUserIDEmpty           = errors.New("user id is empty")
+	ErrSurnameEmpty          = errors.New("surname is empty")
+	ErrGivenNameEmpty        = errors.New("givenName is empty")
+	ErrPhonenumberEmpty      = errors.New("phonenumber is empty")
+	ErrChannelTypeEmpty      = errors.New("channel type is empty")
+	ErrConfirmationTypeEmpty = errors.New("confirmation type is empty")
+	ErrKeyIDEmpty            = errors.New("key id is empty")
+	ErrSecretEmpty           = errors.New("secret is empty")
+	ErrRedisNil              = errors.New("redis pool is nil")
+	ErrMessageNil            = errors.New("message is nil")
+	ErrMessageRoleEmpty      = errors.New("message.Role is empty")
+	ErrMessageTypeEmpty      = errors.New("message.Type is empty")
+	ErrDecodeToken           = errors.New("error decode token")
 )
 
 const (
@@ -264,6 +269,102 @@ func (sc *smoochClient) GetAppUser(userID string) (*AppUser, error) {
 	}
 
 	var response GetAppUserResponse
+	err = sc.sendRequest(req, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return response.AppUser, nil
+}
+
+// PreCreateAppUser will register user to smooch
+func (sc *smoochClient) PreCreateAppUser(userID, surname, givenName string) (*AppUser, error) {
+	url := sc.getURL(
+		fmt.Sprintf("/v1.1/apps/%s/appusers", sc.appID),
+		nil,
+	)
+
+	if userID == "" {
+		return nil, ErrUserIDEmpty
+	}
+
+	if surname == "" {
+		return nil, ErrSurnameEmpty
+	}
+
+	if givenName == "" {
+		return nil, ErrGivenNameEmpty
+	}
+
+	payload := PreCreateAppUserPayload{
+		UserID:    userID,
+		Surname:   surname,
+		GivenName: givenName,
+	}
+
+	buf := new(bytes.Buffer)
+	err := json.NewEncoder(buf).Encode(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := sc.createRequest(http.MethodPost, url, buf, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var response PreCreateAppUserResponse
+	err = sc.sendRequest(req, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return response.AppUser, nil
+}
+
+// LinkAppUserToChannel will link user to specifiied channel
+func (sc *smoochClient) LinkAppUserToChannel(userID, channelType, confirmationType, phoneNumber string) (*AppUser, error) {
+	url := sc.getURL(
+		fmt.Sprintf("/v1.1/apps/%s/appusers/%s/channels", sc.appID, userID),
+		nil,
+	)
+
+	if userID == "" {
+		return nil, ErrUserIDEmpty
+	}
+
+	if channelType == "" {
+		return nil, ErrChannelTypeEmpty
+	}
+
+	if confirmationType == "" {
+		return nil, ErrConfirmationTypeEmpty
+	}
+
+	if phoneNumber == "" {
+		return nil, ErrPhonenumberEmpty
+	}
+
+	payload := LinkAppUserToChannelPayload{
+		Type: channelType,
+		Confirmation: LinkAppConfirmationData{
+			Type: confirmationType,
+		},
+		PhoneNumber: phoneNumber,
+	}
+
+	buf := new(bytes.Buffer)
+	err := json.NewEncoder(buf).Encode(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := sc.createRequest(http.MethodPost, url, buf, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var response LinkAppUserToChannelResponse
 	err = sc.sendRequest(req, &response)
 	if err != nil {
 		return nil, err

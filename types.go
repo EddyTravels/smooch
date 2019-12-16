@@ -17,6 +17,7 @@ const (
 	MessageTypeLocation = MessageType("location")
 	MessageTypeCarousel = MessageType("carousel")
 	MessageTypeList     = MessageType("list")
+	MessageTypeHSM      = MessageType("hsm")
 
 	ActionTypePostback        = ActionType("postback")
 	ActionTypeReply           = ActionType("reply")
@@ -46,6 +47,10 @@ const (
 	TriggerMessageDeliveryFailure = "message:delivery:failure"
 	TriggerMessageDeliveryChannel = "message:delivery:channel"
 	TriggerMessageDeliveryUser    = "message:delivery:user"
+
+	ConfirmationTypeImmediate    = "immediate"
+	ConfirmationTypeUserActivity = "userActivity"
+	ConfirmationTypePrompt       = "prompt"
 
 	ImageRatioHorizontal = ImageRatio("horizontal")
 	ImageRatioSquare     = ImageRatio("square")
@@ -301,6 +306,35 @@ type ResponsePayload struct {
 }
 
 type GetAppUserResponse struct {
+	AppUser *AppUser `json:"appUser,omitempty"`
+}
+
+// PreCreateAppUserPayload defines payload for pre-create app user request
+type PreCreateAppUserPayload struct {
+	UserID    string `json:"userId"`
+	Surname   string `json:"surname"`
+	GivenName string `json:"givenName"`
+}
+
+// PreCreateAppUserResponse defines response for pre-create use request
+type PreCreateAppUserResponse struct {
+	AppUser *AppUser `json:"appUser,omitempty"`
+}
+
+// LinkAppConfirmationData defines
+type LinkAppConfirmationData struct {
+	Type string `json:"type"`
+}
+
+// LinkAppUserToChannelPayload will link app user to specified channel
+type LinkAppUserToChannelPayload struct {
+	Type         string                  `json:"type"`
+	Confirmation LinkAppConfirmationData `json:"confirmation"`
+	PhoneNumber  string                  `json:"phoneNumber"`
+}
+
+// LinkAppUserToChannelResponse defines reponse for link app user to channel request
+type LinkAppUserToChannelResponse struct {
 	AppUser *AppUser `json:"appUser,omitempty"`
 }
 
