@@ -63,7 +63,10 @@ type Client interface {
 	RenewToken() (string, error)
 	AddWebhookEventHandler(handler WebhookEventHandler)
 	Send(userID string, message *Message) (*ResponsePayload, error)
+	SendHSM(userID string, hsmMessage *HsmMessage) (*ResponsePayload, error)
 	GetAppUser(userID string) (*AppUser, error)
+	PreCreateAppUser(userID, surname, givenName string) (*AppUser, error)
+	LinkAppUserToChannel(channelType, confirmationType, phoneNumber string) (*AppUser, error)
 	UploadFileAttachment(filepath string, upload AttachmentUpload) (*Attachment, error)
 	UploadAttachment(r io.Reader, upload AttachmentUpload) (*Attachment, error)
 }
@@ -204,6 +207,33 @@ func (sc *smoochClient) Send(userID string, message *Message) (*ResponsePayload,
 
 	buf := new(bytes.Buffer)
 	err := json.NewEncoder(buf).Encode(message)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := sc.createRequest(http.MethodPost, url, buf, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var responsePayload ResponsePayload
+	err = sc.sendRequest(req, &responsePayload)
+	if err != nil {
+		return nil, err
+	}
+
+	return &responsePayload, nil
+}
+
+// SendHSM will send message using Whatsapp HSM template
+func (sc *smoochClient) SendHSM(userID string, hsmMessage *HsmMessage) (*ResponsePayload, error) {
+	url := sc.getURL(
+		fmt.Sprintf("/v1.1/apps/%s/appusers/%s/messages", sc.appID, userID),
+		nil,
+	)
+
+	buf := new(bytes.Buffer)
+	err := json.NewEncoder(buf).Encode(hsmMessage)
 	if err != nil {
 		return nil, err
 	}
