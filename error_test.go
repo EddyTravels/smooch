@@ -27,7 +27,7 @@ func TestCheckSmoochError(t *testing.T) {
 		Body:       r,
 	}
 
-	err := checkSmoochError(response)
+	_, err := checkSmoochError(response)
 	assert.Error(t, err)
 	assert.EqualError(t, err, "StatusCode: 401 Code: unauthorized Message: Authorization is required")
 }
