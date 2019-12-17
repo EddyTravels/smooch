@@ -210,27 +210,27 @@ func (m *Message) MarshalJSON() ([]byte, error) {
 
 // HsmLanguage defines hsm language payload
 type HsmLanguage struct {
-	Policy string `json:"policy"`
-	Code   string `json:"code"`
+	Policy string `json:"policy" mapstructure:"policy"`
+	Code   string `json:"code" mapstructure:"code"`
 }
 
 // HsmLocalizableParams defines hsm localizable params data
 type HsmLocalizableParams struct {
-	Default interface{} `json:"default"`
+	Default interface{} `json:"default" mapstructure:"default"`
 }
 
 // HsmPayload defines payload for hsm
 type HsmPayload struct {
-	Namespace         string                 `json:"namespace"`
-	ElementName       string                 `json:"element_name"`
-	Language          HsmLanguage            `json:"language"`
-	LocalizableParams []HsmLocalizableParams `json:"localizable_params"`
+	Namespace         string                 `json:"namespace" mapstructure:"namespace"`
+	ElementName       string                 `json:"element_name" mapstructure:"element_name"`
+	Language          HsmLanguage            `json:"language" mapstructure:"language"`
+	LocalizableParams []HsmLocalizableParams `json:"localizable_params" mapstructure:"localizable_params"`
 }
 
 // HsmMessageBody defines property for HSM message
 type HsmMessageBody struct {
-	Type MessageType `json:"type"`
-	Hsm  HsmPayload  `json:"hsm"`
+	Type MessageType `json:"type" mapstructure:"type"`
+	Hsm  HsmPayload  `json:"hsm" mapstructure:"hsm"`
 }
 
 // HsmMessage defines struct payload for Whatsapp HSM message
