@@ -27,6 +27,9 @@ const (
 	ActionTypeLink            = ActionType("link")
 	ActionTypeWebview         = ActionType("webview")
 
+	AuthBasic = "basic_auth"
+	AuthJWT   = "jwt"
+
 	SourceTypeWeb       = "web"
 	SourceTypeIOS       = "ios"
 	SourceTypeAndroid   = "android"

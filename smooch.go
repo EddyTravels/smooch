@@ -33,6 +33,7 @@ var (
 	ErrMessageRoleEmpty      = errors.New("message.Role is empty")
 	ErrMessageTypeEmpty      = errors.New("message.Type is empty")
 	ErrDecodeToken           = errors.New("error decode token")
+	ErrWrongAuth             = errors.New("error wrong authentication")
 )
 
 const (
@@ -49,6 +50,7 @@ const (
 )
 
 type Options struct {
+	Auth       string
 	AppID      string
 	KeyID      string
 	Secret     string
@@ -78,6 +80,7 @@ type Client interface {
 
 type smoochClient struct {
 	mux                  *http.ServeMux
+	auth                 string
 	appID                string
 	keyID                string
 	secret               string
@@ -127,22 +130,29 @@ func New(o Options) (*smoochClient, error) {
 		region = RegionEU
 	}
 
-	sc := &smoochClient{
-		mux:          o.Mux,
-		appID:        o.AppID,
-		keyID:        o.KeyID,
-		secret:       o.Secret,
-		logger:       o.Logger,
-		region:       region,
-		httpClient:   o.HttpClient,
-		RedisStorage: storage.NewRedisStorage(o.RedisPool),
+	if o.Auth != AuthBasic && o.Auth != AuthJWT {
+		return nil, ErrWrongAuth
 	}
 
-	_, err := sc.RedisStorage.GetTokenFromRedis()
-	if err != nil {
-		_, err := sc.RenewToken()
+	sc := &smoochClient{
+		mux:        o.Mux,
+		appID:      o.AppID,
+		keyID:      o.KeyID,
+		secret:     o.Secret,
+		logger:     o.Logger,
+		region:     region,
+		httpClient: o.HttpClient,
+	}
+
+	if sc.auth == AuthJWT {
+		sc.RedisStorage = storage.NewRedisStorage(o.RedisPool)
+
+		_, err := sc.RedisStorage.GetTokenFromRedis()
 		if err != nil {
-			return nil, err
+			_, err := sc.RenewToken()
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -516,34 +526,41 @@ func (sc *smoochClient) createRequest(
 		header.Set(contentTypeHeaderKey, contentTypeJSON)
 	}
 
-	isExpired, err := sc.IsJWTExpired()
-	if err != nil {
-		return nil, err
-	}
-
-	if isExpired {
-		jwtToken, err = sc.RenewToken()
+	if sc.auth == AuthJWT {
+		isExpired, err := sc.IsJWTExpired()
 		if err != nil {
 			return nil, err
 		}
-	} else {
-		jwtToken, err = sc.RedisStorage.GetTokenFromRedis()
-		if err != nil {
-			return nil, err
-		}
-	}
 
-	header.Set(authorizationHeaderKey, fmt.Sprintf("Bearer %s", jwtToken))
+		if isExpired {
+			jwtToken, err = sc.RenewToken()
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			jwtToken, err = sc.RedisStorage.GetTokenFromRedis()
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		header.Set(authorizationHeaderKey, fmt.Sprintf("Bearer %s", jwtToken))
+	}
 
 	if buf == nil {
 		req, err = http.NewRequest(method, url, nil)
 	} else {
 		req, err = http.NewRequest(method, url, buf)
 	}
+
 	if err != nil {
 		return nil, err
 	}
 	req.Header = header
+
+	if sc.auth == AuthBasic {
+		req.SetBasicAuth(sc.keyID, sc.secret)
+	}
 
 	return req, nil
 }
