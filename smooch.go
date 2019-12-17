@@ -101,10 +101,6 @@ func New(o Options) (*smoochClient, error) {
 		return nil, ErrSecretEmpty
 	}
 
-	if o.RedisPool == nil {
-		return nil, ErrRedisNil
-	}
-
 	if o.Mux == nil {
 		o.Mux = http.NewServeMux()
 	}
@@ -135,6 +131,7 @@ func New(o Options) (*smoochClient, error) {
 	}
 
 	sc := &smoochClient{
+		auth:       o.Auth,
 		mux:        o.Mux,
 		appID:      o.AppID,
 		keyID:      o.KeyID,
@@ -145,6 +142,10 @@ func New(o Options) (*smoochClient, error) {
 	}
 
 	if sc.auth == AuthJWT {
+		if o.RedisPool == nil {
+			return nil, ErrRedisNil
+		}
+
 		sc.RedisStorage = storage.NewRedisStorage(o.RedisPool)
 
 		_, err := sc.RedisStorage.GetTokenFromRedis()
