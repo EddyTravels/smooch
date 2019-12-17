@@ -199,21 +199,21 @@ func (sc *smoochClient) AddWebhookEventHandler(handler WebhookEventHandler) {
 	sc.webhookEventHandlers = append(sc.webhookEventHandlers, handler)
 }
 
-func (sc *smoochClient) Send(userID string, message *Message) (*ResponsePayload, error) {
+func (sc *smoochClient) Send(userID string, message *Message) (*ResponsePayload, *ResponseData, error) {
 	if userID == "" {
-		return nil, ErrUserIDEmpty
+		return nil, nil, ErrUserIDEmpty
 	}
 
 	if message == nil {
-		return nil, ErrMessageNil
+		return nil, nil, ErrMessageNil
 	}
 
 	if message.Role == "" {
-		return nil, ErrMessageRoleEmpty
+		return nil, nil, ErrMessageRoleEmpty
 	}
 
 	if message.Type == "" {
-		return nil, ErrMessageTypeEmpty
+		return nil, nil, ErrMessageTypeEmpty
 	}
 
 	url := sc.getURL(
@@ -224,25 +224,25 @@ func (sc *smoochClient) Send(userID string, message *Message) (*ResponsePayload,
 	buf := new(bytes.Buffer)
 	err := json.NewEncoder(buf).Encode(message)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	req, err := sc.createRequest(http.MethodPost, url, buf, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var responsePayload ResponsePayload
-	err = sc.sendRequest(req, &responsePayload)
+	respData, err := sc.sendRequest(req, &responsePayload)
 	if err != nil {
-		return nil, err
+		return nil, respData, err
 	}
 
-	return &responsePayload, nil
+	return &responsePayload, respData, nil
 }
 
 // SendHSM will send message using Whatsapp HSM template
-func (sc *smoochClient) SendHSM(userID string, hsmMessage *HsmMessage) (*ResponsePayload, error) {
+func (sc *smoochClient) SendHSM(userID string, hsmMessage *HsmMessage) (*ResponsePayload, *ResponseData, error) {
 	url := sc.getURL(
 		fmt.Sprintf("/v1.1/apps/%s/appusers/%s/messages", sc.appID, userID),
 		nil,
@@ -251,24 +251,24 @@ func (sc *smoochClient) SendHSM(userID string, hsmMessage *HsmMessage) (*Respons
 	buf := new(bytes.Buffer)
 	err := json.NewEncoder(buf).Encode(hsmMessage)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	req, err := sc.createRequest(http.MethodPost, url, buf, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var responsePayload ResponsePayload
-	err = sc.sendRequest(req, &responsePayload)
+	respData, err := sc.sendRequest(req, &responsePayload)
 	if err != nil {
-		return nil, err
+		return nil, respData, err
 	}
 
-	return &responsePayload, nil
+	return &responsePayload, respData, nil
 }
 
-func (sc *smoochClient) GetAppUser(userID string) (*AppUser, error) {
+func (sc *smoochClient) GetAppUser(userID string) (*AppUser, *ResponseData, error) {
 	url := sc.getURL(
 		fmt.Sprintf("/v1.1/apps/%s/appusers/%s", sc.appID, userID),
 		nil,
@@ -276,35 +276,35 @@ func (sc *smoochClient) GetAppUser(userID string) (*AppUser, error) {
 
 	req, err := sc.createRequest(http.MethodGet, url, nil, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var response GetAppUserResponse
-	err = sc.sendRequest(req, &response)
+	respData, err := sc.sendRequest(req, &response)
 	if err != nil {
-		return nil, err
+		return nil, respData, err
 	}
 
-	return response.AppUser, nil
+	return response.AppUser, respData, nil
 }
 
 // PreCreateAppUser will register user to smooch
-func (sc *smoochClient) PreCreateAppUser(userID, surname, givenName string) (*AppUser, error) {
+func (sc *smoochClient) PreCreateAppUser(userID, surname, givenName string) (*AppUser, *ResponseData, error) {
 	url := sc.getURL(
 		fmt.Sprintf("/v1.1/apps/%s/appusers", sc.appID),
 		nil,
 	)
 
 	if userID == "" {
-		return nil, ErrUserIDEmpty
+		return nil, nil, ErrUserIDEmpty
 	}
 
 	if surname == "" {
-		return nil, ErrSurnameEmpty
+		return nil, nil, ErrSurnameEmpty
 	}
 
 	if givenName == "" {
-		return nil, ErrGivenNameEmpty
+		return nil, nil, ErrGivenNameEmpty
 	}
 
 	payload := PreCreateAppUserPayload{
@@ -316,44 +316,44 @@ func (sc *smoochClient) PreCreateAppUser(userID, surname, givenName string) (*Ap
 	buf := new(bytes.Buffer)
 	err := json.NewEncoder(buf).Encode(payload)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	req, err := sc.createRequest(http.MethodPost, url, buf, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var response PreCreateAppUserResponse
-	err = sc.sendRequest(req, &response)
+	respData, err := sc.sendRequest(req, &response)
 	if err != nil {
-		return nil, err
+		return nil, respData, err
 	}
 
-	return response.AppUser, nil
+	return response.AppUser, respData, nil
 }
 
 // LinkAppUserToChannel will link user to specifiied channel
-func (sc *smoochClient) LinkAppUserToChannel(userID, channelType, confirmationType, phoneNumber string) (*AppUser, error) {
+func (sc *smoochClient) LinkAppUserToChannel(userID, channelType, confirmationType, phoneNumber string) (*AppUser, *ResponseData, error) {
 	url := sc.getURL(
 		fmt.Sprintf("/v1.1/apps/%s/appusers/%s/channels", sc.appID, userID),
 		nil,
 	)
 
 	if userID == "" {
-		return nil, ErrUserIDEmpty
+		return nil, nil, ErrUserIDEmpty
 	}
 
 	if channelType == "" {
-		return nil, ErrChannelTypeEmpty
+		return nil, nil, ErrChannelTypeEmpty
 	}
 
 	if confirmationType == "" {
-		return nil, ErrConfirmationTypeEmpty
+		return nil, nil, ErrConfirmationTypeEmpty
 	}
 
 	if phoneNumber == "" {
-		return nil, ErrPhonenumberEmpty
+		return nil, nil, ErrPhonenumberEmpty
 	}
 
 	payload := LinkAppUserToChannelPayload{
@@ -367,34 +367,34 @@ func (sc *smoochClient) LinkAppUserToChannel(userID, channelType, confirmationTy
 	buf := new(bytes.Buffer)
 	err := json.NewEncoder(buf).Encode(payload)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	req, err := sc.createRequest(http.MethodPost, url, buf, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var response LinkAppUserToChannelResponse
-	err = sc.sendRequest(req, &response)
+	respData, err := sc.sendRequest(req, &response)
 	if err != nil {
-		return nil, err
+		return nil, respData, err
 	}
 
-	return response.AppUser, nil
+	return response.AppUser, respData, nil
 }
 
-func (sc *smoochClient) UploadFileAttachment(filepath string, upload AttachmentUpload) (*Attachment, error) {
+func (sc *smoochClient) UploadFileAttachment(filepath string, upload AttachmentUpload) (*Attachment, *ResponseData, error) {
 	r, err := os.Open(filepath)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer r.Close()
 
 	return sc.UploadAttachment(r, upload)
 
 }
-func (sc *smoochClient) UploadAttachment(r io.Reader, upload AttachmentUpload) (*Attachment, error) {
+func (sc *smoochClient) UploadAttachment(r io.Reader, upload AttachmentUpload) (*Attachment, *ResponseData, error) {
 
 	queryParams := url.Values{
 		"access": []string{upload.Access},
@@ -421,19 +421,19 @@ func (sc *smoochClient) UploadAttachment(r io.Reader, upload AttachmentUpload) (
 
 	req, err := sc.createMultipartRequest(url, formData)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var response Attachment
-	err = sc.sendRequest(req, &response)
+	respData, err := sc.sendRequest(req, &response)
 	if err != nil {
-		return nil, err
+		return nil, respData, err
 	}
 
-	return &response, nil
+	return &response, respData, nil
 }
 
-func (sc *smoochClient) DeleteAttachment(attachment *Attachment) error {
+func (sc *smoochClient) DeleteAttachment(attachment *Attachment) (*ResponseData, error) {
 	url := sc.getURL(
 		fmt.Sprintf("/v1.1/apps/%s/attachments", sc.appID),
 		nil,
@@ -442,20 +442,20 @@ func (sc *smoochClient) DeleteAttachment(attachment *Attachment) error {
 	buf := new(bytes.Buffer)
 	err := json.NewEncoder(buf).Encode(attachment)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	req, err := sc.createRequest(http.MethodPost, url, buf, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	err = sc.sendRequest(req, nil)
+	respData, err := sc.sendRequest(req, nil)
 	if err != nil {
-		return err
+		return respData, err
 	}
 
-	return nil
+	return respData, nil
 }
 
 func (sc *smoochClient) handle(w http.ResponseWriter, r *http.Request) {
@@ -610,10 +610,10 @@ func (sc *smoochClient) createMultipartRequest(
 	return req, nil
 }
 
-func (sc *smoochClient) sendRequest(req *http.Request, v interface{}) error {
+func (sc *smoochClient) sendRequest(req *http.Request, v interface{}) (*ResponseData, error) {
 	response, err := sc.httpClient.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer response.Body.Close()
 
@@ -621,10 +621,14 @@ func (sc *smoochClient) sendRequest(req *http.Request, v interface{}) error {
 		if v != nil {
 			err := json.NewDecoder(response.Body).Decode(&v)
 			if err != nil {
-				return err
+				return nil, err
 			}
 		}
-		return nil
+
+		respData := &ResponseData{
+			HTTPCode: response.StatusCode,
+		}
+		return respData, nil
 	}
 	return checkSmoochError(response)
 }

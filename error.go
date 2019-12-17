@@ -6,6 +6,12 @@ import (
 	"net/http"
 )
 
+// ResponseData defines data for every response
+type ResponseData struct {
+	HTTPCode int
+	Flag     string
+}
+
 type SmoochError struct {
 	message string
 	code    int
@@ -19,11 +25,11 @@ func (e *SmoochError) Error() string {
 	return e.message
 }
 
-func checkSmoochError(r *http.Response) error {
+func checkSmoochError(r *http.Response) (*ResponseData, error) {
 	var errorPayload ErrorPayload
 	decodeErr := json.NewDecoder(r.Body).Decode(&errorPayload)
 	if decodeErr != nil {
-		return decodeErr
+		return nil, decodeErr
 	}
 
 	err := &SmoochError{
@@ -35,5 +41,9 @@ func checkSmoochError(r *http.Response) error {
 		code: r.StatusCode,
 	}
 
-	return err
+	respData := &ResponseData{
+		HTTPCode: r.StatusCode,
+		Flag:     errorPayload.Details.Code,
+	}
+	return respData, err
 }
