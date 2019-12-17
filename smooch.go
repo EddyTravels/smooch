@@ -20,14 +20,20 @@ import (
 )
 
 var (
-	ErrUserIDEmpty      = errors.New("user id is empty")
-	ErrKeyIDEmpty       = errors.New("key id is empty")
-	ErrSecretEmpty      = errors.New("secret is empty")
-	ErrRedisNil         = errors.New("redis pool is nil")
-	ErrMessageNil       = errors.New("message is nil")
-	ErrMessageRoleEmpty = errors.New("message.Role is empty")
-	ErrMessageTypeEmpty = errors.New("message.Type is empty")
-	ErrDecodeToken      = errors.New("error decode token")
+	ErrUserIDEmpty           = errors.New("user id is empty")
+	ErrSurnameEmpty          = errors.New("surname is empty")
+	ErrGivenNameEmpty        = errors.New("givenName is empty")
+	ErrPhonenumberEmpty      = errors.New("phonenumber is empty")
+	ErrChannelTypeEmpty      = errors.New("channel type is empty")
+	ErrConfirmationTypeEmpty = errors.New("confirmation type is empty")
+	ErrKeyIDEmpty            = errors.New("key id is empty")
+	ErrSecretEmpty           = errors.New("secret is empty")
+	ErrRedisNil              = errors.New("redis pool is nil")
+	ErrMessageNil            = errors.New("message is nil")
+	ErrMessageRoleEmpty      = errors.New("message.Role is empty")
+	ErrMessageTypeEmpty      = errors.New("message.Type is empty")
+	ErrDecodeToken           = errors.New("error decode token")
+	ErrWrongAuth             = errors.New("error wrong authentication")
 )
 
 const (
@@ -44,6 +50,7 @@ const (
 )
 
 type Options struct {
+	Auth       string
 	AppID      string
 	KeyID      string
 	Secret     string
@@ -63,13 +70,17 @@ type Client interface {
 	RenewToken() (string, error)
 	AddWebhookEventHandler(handler WebhookEventHandler)
 	Send(userID string, message *Message) (*ResponsePayload, error)
+	SendHSM(userID string, hsmMessage *HsmMessage) (*ResponsePayload, error)
 	GetAppUser(userID string) (*AppUser, error)
+	PreCreateAppUser(userID, surname, givenName string) (*AppUser, error)
+	LinkAppUserToChannel(channelType, confirmationType, phoneNumber string) (*AppUser, error)
 	UploadFileAttachment(filepath string, upload AttachmentUpload) (*Attachment, error)
 	UploadAttachment(r io.Reader, upload AttachmentUpload) (*Attachment, error)
 }
 
 type smoochClient struct {
 	mux                  *http.ServeMux
+	auth                 string
 	appID                string
 	keyID                string
 	secret               string
@@ -88,10 +99,6 @@ func New(o Options) (*smoochClient, error) {
 
 	if o.Secret == "" {
 		return nil, ErrSecretEmpty
-	}
-
-	if o.RedisPool == nil {
-		return nil, ErrRedisNil
 	}
 
 	if o.Mux == nil {
@@ -119,22 +126,34 @@ func New(o Options) (*smoochClient, error) {
 		region = RegionEU
 	}
 
-	sc := &smoochClient{
-		mux:          o.Mux,
-		appID:        o.AppID,
-		keyID:        o.KeyID,
-		secret:       o.Secret,
-		logger:       o.Logger,
-		region:       region,
-		httpClient:   o.HttpClient,
-		RedisStorage: storage.NewRedisStorage(o.RedisPool),
+	if o.Auth != AuthBasic && o.Auth != AuthJWT {
+		return nil, ErrWrongAuth
 	}
 
-	_, err := sc.RedisStorage.GetTokenFromRedis()
-	if err != nil {
-		_, err := sc.RenewToken()
+	sc := &smoochClient{
+		auth:       o.Auth,
+		mux:        o.Mux,
+		appID:      o.AppID,
+		keyID:      o.KeyID,
+		secret:     o.Secret,
+		logger:     o.Logger,
+		region:     region,
+		httpClient: o.HttpClient,
+	}
+
+	if sc.auth == AuthJWT {
+		if o.RedisPool == nil {
+			return nil, ErrRedisNil
+		}
+
+		sc.RedisStorage = storage.NewRedisStorage(o.RedisPool)
+
+		_, err := sc.RedisStorage.GetTokenFromRedis()
 		if err != nil {
-			return nil, err
+			_, err := sc.RenewToken()
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -180,21 +199,21 @@ func (sc *smoochClient) AddWebhookEventHandler(handler WebhookEventHandler) {
 	sc.webhookEventHandlers = append(sc.webhookEventHandlers, handler)
 }
 
-func (sc *smoochClient) Send(userID string, message *Message) (*ResponsePayload, error) {
+func (sc *smoochClient) Send(userID string, message *Message) (*ResponsePayload, *ResponseData, error) {
 	if userID == "" {
-		return nil, ErrUserIDEmpty
+		return nil, nil, ErrUserIDEmpty
 	}
 
 	if message == nil {
-		return nil, ErrMessageNil
+		return nil, nil, ErrMessageNil
 	}
 
 	if message.Role == "" {
-		return nil, ErrMessageRoleEmpty
+		return nil, nil, ErrMessageRoleEmpty
 	}
 
 	if message.Type == "" {
-		return nil, ErrMessageTypeEmpty
+		return nil, nil, ErrMessageTypeEmpty
 	}
 
 	url := sc.getURL(
@@ -205,24 +224,51 @@ func (sc *smoochClient) Send(userID string, message *Message) (*ResponsePayload,
 	buf := new(bytes.Buffer)
 	err := json.NewEncoder(buf).Encode(message)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	req, err := sc.createRequest(http.MethodPost, url, buf, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var responsePayload ResponsePayload
-	err = sc.sendRequest(req, &responsePayload)
+	respData, err := sc.sendRequest(req, &responsePayload)
 	if err != nil {
-		return nil, err
+		return nil, respData, err
 	}
 
-	return &responsePayload, nil
+	return &responsePayload, respData, nil
 }
 
-func (sc *smoochClient) GetAppUser(userID string) (*AppUser, error) {
+// SendHSM will send message using Whatsapp HSM template
+func (sc *smoochClient) SendHSM(userID string, hsmMessage *HsmMessage) (*ResponsePayload, *ResponseData, error) {
+	url := sc.getURL(
+		fmt.Sprintf("/v1.1/apps/%s/appusers/%s/messages", sc.appID, userID),
+		nil,
+	)
+
+	buf := new(bytes.Buffer)
+	err := json.NewEncoder(buf).Encode(hsmMessage)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	req, err := sc.createRequest(http.MethodPost, url, buf, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var responsePayload ResponsePayload
+	respData, err := sc.sendRequest(req, &responsePayload)
+	if err != nil {
+		return nil, respData, err
+	}
+
+	return &responsePayload, respData, nil
+}
+
+func (sc *smoochClient) GetAppUser(userID string) (*AppUser, *ResponseData, error) {
 	url := sc.getURL(
 		fmt.Sprintf("/v1.1/apps/%s/appusers/%s", sc.appID, userID),
 		nil,
@@ -230,29 +276,125 @@ func (sc *smoochClient) GetAppUser(userID string) (*AppUser, error) {
 
 	req, err := sc.createRequest(http.MethodGet, url, nil, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var response GetAppUserResponse
-	err = sc.sendRequest(req, &response)
+	respData, err := sc.sendRequest(req, &response)
 	if err != nil {
-		return nil, err
+		return nil, respData, err
 	}
 
-	return response.AppUser, nil
+	return response.AppUser, respData, nil
 }
 
-func (sc *smoochClient) UploadFileAttachment(filepath string, upload AttachmentUpload) (*Attachment, error) {
+// PreCreateAppUser will register user to smooch
+func (sc *smoochClient) PreCreateAppUser(userID, surname, givenName string) (*AppUser, *ResponseData, error) {
+	url := sc.getURL(
+		fmt.Sprintf("/v1.1/apps/%s/appusers", sc.appID),
+		nil,
+	)
+
+	if userID == "" {
+		return nil, nil, ErrUserIDEmpty
+	}
+
+	if surname == "" {
+		return nil, nil, ErrSurnameEmpty
+	}
+
+	if givenName == "" {
+		return nil, nil, ErrGivenNameEmpty
+	}
+
+	payload := PreCreateAppUserPayload{
+		UserID:    userID,
+		Surname:   surname,
+		GivenName: givenName,
+	}
+
+	buf := new(bytes.Buffer)
+	err := json.NewEncoder(buf).Encode(payload)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	req, err := sc.createRequest(http.MethodPost, url, buf, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var response PreCreateAppUserResponse
+	respData, err := sc.sendRequest(req, &response)
+	if err != nil {
+		return nil, respData, err
+	}
+
+	return response.AppUser, respData, nil
+}
+
+// LinkAppUserToChannel will link user to specifiied channel
+func (sc *smoochClient) LinkAppUserToChannel(userID, channelType, confirmationType, phoneNumber string) (*AppUser, *ResponseData, error) {
+	url := sc.getURL(
+		fmt.Sprintf("/v1.1/apps/%s/appusers/%s/channels", sc.appID, userID),
+		nil,
+	)
+
+	if userID == "" {
+		return nil, nil, ErrUserIDEmpty
+	}
+
+	if channelType == "" {
+		return nil, nil, ErrChannelTypeEmpty
+	}
+
+	if confirmationType == "" {
+		return nil, nil, ErrConfirmationTypeEmpty
+	}
+
+	if phoneNumber == "" {
+		return nil, nil, ErrPhonenumberEmpty
+	}
+
+	payload := LinkAppUserToChannelPayload{
+		Type: channelType,
+		Confirmation: LinkAppConfirmationData{
+			Type: confirmationType,
+		},
+		PhoneNumber: phoneNumber,
+	}
+
+	buf := new(bytes.Buffer)
+	err := json.NewEncoder(buf).Encode(payload)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	req, err := sc.createRequest(http.MethodPost, url, buf, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var response LinkAppUserToChannelResponse
+	respData, err := sc.sendRequest(req, &response)
+	if err != nil {
+		return nil, respData, err
+	}
+
+	return response.AppUser, respData, nil
+}
+
+func (sc *smoochClient) UploadFileAttachment(filepath string, upload AttachmentUpload) (*Attachment, *ResponseData, error) {
 	r, err := os.Open(filepath)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer r.Close()
 
 	return sc.UploadAttachment(r, upload)
 
 }
-func (sc *smoochClient) UploadAttachment(r io.Reader, upload AttachmentUpload) (*Attachment, error) {
+func (sc *smoochClient) UploadAttachment(r io.Reader, upload AttachmentUpload) (*Attachment, *ResponseData, error) {
 
 	queryParams := url.Values{
 		"access": []string{upload.Access},
@@ -279,19 +421,19 @@ func (sc *smoochClient) UploadAttachment(r io.Reader, upload AttachmentUpload) (
 
 	req, err := sc.createMultipartRequest(url, formData)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var response Attachment
-	err = sc.sendRequest(req, &response)
+	respData, err := sc.sendRequest(req, &response)
 	if err != nil {
-		return nil, err
+		return nil, respData, err
 	}
 
-	return &response, nil
+	return &response, respData, nil
 }
 
-func (sc *smoochClient) DeleteAttachment(attachment *Attachment) error {
+func (sc *smoochClient) DeleteAttachment(attachment *Attachment) (*ResponseData, error) {
 	url := sc.getURL(
 		fmt.Sprintf("/v1.1/apps/%s/attachments", sc.appID),
 		nil,
@@ -300,20 +442,20 @@ func (sc *smoochClient) DeleteAttachment(attachment *Attachment) error {
 	buf := new(bytes.Buffer)
 	err := json.NewEncoder(buf).Encode(attachment)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	req, err := sc.createRequest(http.MethodPost, url, buf, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	err = sc.sendRequest(req, nil)
+	respData, err := sc.sendRequest(req, nil)
 	if err != nil {
-		return err
+		return respData, err
 	}
 
-	return nil
+	return respData, nil
 }
 
 func (sc *smoochClient) handle(w http.ResponseWriter, r *http.Request) {
@@ -385,34 +527,41 @@ func (sc *smoochClient) createRequest(
 		header.Set(contentTypeHeaderKey, contentTypeJSON)
 	}
 
-	isExpired, err := sc.IsJWTExpired()
-	if err != nil {
-		return nil, err
-	}
-
-	if isExpired {
-		jwtToken, err = sc.RenewToken()
+	if sc.auth == AuthJWT {
+		isExpired, err := sc.IsJWTExpired()
 		if err != nil {
 			return nil, err
 		}
-	} else {
-		jwtToken, err = sc.RedisStorage.GetTokenFromRedis()
-		if err != nil {
-			return nil, err
-		}
-	}
 
-	header.Set(authorizationHeaderKey, fmt.Sprintf("Bearer %s", jwtToken))
+		if isExpired {
+			jwtToken, err = sc.RenewToken()
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			jwtToken, err = sc.RedisStorage.GetTokenFromRedis()
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		header.Set(authorizationHeaderKey, fmt.Sprintf("Bearer %s", jwtToken))
+	}
 
 	if buf == nil {
 		req, err = http.NewRequest(method, url, nil)
 	} else {
 		req, err = http.NewRequest(method, url, buf)
 	}
+
 	if err != nil {
 		return nil, err
 	}
 	req.Header = header
+
+	if sc.auth == AuthBasic {
+		req.SetBasicAuth(sc.keyID, sc.secret)
+	}
 
 	return req, nil
 }
@@ -461,10 +610,10 @@ func (sc *smoochClient) createMultipartRequest(
 	return req, nil
 }
 
-func (sc *smoochClient) sendRequest(req *http.Request, v interface{}) error {
+func (sc *smoochClient) sendRequest(req *http.Request, v interface{}) (*ResponseData, error) {
 	response, err := sc.httpClient.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer response.Body.Close()
 
@@ -472,10 +621,14 @@ func (sc *smoochClient) sendRequest(req *http.Request, v interface{}) error {
 		if v != nil {
 			err := json.NewDecoder(response.Body).Decode(&v)
 			if err != nil {
-				return err
+				return nil, err
 			}
 		}
-		return nil
+
+		respData := &ResponseData{
+			HTTPCode: response.StatusCode,
+		}
+		return respData, nil
 	}
 	return checkSmoochError(response)
 }

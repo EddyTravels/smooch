@@ -17,6 +17,7 @@ const (
 	MessageTypeLocation = MessageType("location")
 	MessageTypeCarousel = MessageType("carousel")
 	MessageTypeList     = MessageType("list")
+	MessageTypeHSM      = MessageType("hsm")
 
 	ActionTypePostback        = ActionType("postback")
 	ActionTypeReply           = ActionType("reply")
@@ -25,6 +26,9 @@ const (
 	ActionTypeBuy             = ActionType("buy")
 	ActionTypeLink            = ActionType("link")
 	ActionTypeWebview         = ActionType("webview")
+
+	AuthBasic = "basic_auth"
+	AuthJWT   = "jwt"
 
 	SourceTypeWeb       = "web"
 	SourceTypeIOS       = "ios"
@@ -46,6 +50,10 @@ const (
 	TriggerMessageDeliveryFailure = "message:delivery:failure"
 	TriggerMessageDeliveryChannel = "message:delivery:channel"
 	TriggerMessageDeliveryUser    = "message:delivery:user"
+
+	ConfirmationTypeImmediate    = "immediate"
+	ConfirmationTypeUserActivity = "userActivity"
+	ConfirmationTypePrompt       = "prompt"
 
 	ImageRatioHorizontal = ImageRatio("horizontal")
 	ImageRatioSquare     = ImageRatio("square")
@@ -107,6 +115,7 @@ type AppUser struct {
 	Email               string                 `json:"email,omitempty"`
 	GivenName           string                 `json:"givenName,omitempty"`
 	Surname             string                 `json:"surname,omitempty"`
+	HasPaymentInfo      bool                   `json:"hasPaymentInfo,omitmepty"`
 }
 
 type AppUserClient struct {
@@ -199,6 +208,70 @@ func (m *Message) MarshalJSON() ([]byte, error) {
 	return json.Marshal(aux)
 }
 
+// HsmLanguage defines hsm language payload
+type HsmLanguage struct {
+	Policy string `json:"policy"`
+	Code   string `json:"code"`
+}
+
+// HsmLocalizableParams defines hsm localizable params data
+type HsmLocalizableParams struct {
+	Default interface{} `json:"default"`
+}
+
+// HsmPayload defines payload for hsm
+type HsmPayload struct {
+	Namespace         string                 `json:"namespace"`
+	ElementName       string                 `json:"element_name"`
+	Language          HsmLanguage            `json:"language"`
+	LocalizableParams []HsmLocalizableParams `json:"localizable_params"`
+}
+
+// HsmMessageBody defines property for HSM message
+type HsmMessageBody struct {
+	Type MessageType `json:"type"`
+	Hsm  HsmPayload  `json:"hsm"`
+}
+
+// HsmMessage defines struct payload for Whatsapp HSM message
+type HsmMessage struct {
+	Role          Role           `json:"role"`
+	MessageSchema string         `json:"messageSchema"`
+	Message       HsmMessageBody `json:"message"`
+	Received      time.Time      `json:"received,omitempty"`
+}
+
+// UnmarshalJSON will unmarshall whatsapp HSM message
+func (hm *HsmMessage) UnmarshalJSON(data []byte) error {
+	type Alias HsmMessage
+	aux := &struct {
+		Received float64 `json:"received"`
+		*Alias
+	}{
+		Alias: (*Alias)(hm),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	seconds := int64(aux.Received)
+	ns := (int64(aux.Received*1000) - seconds*1000) * nsMultiplier
+	hm.Received = time.Unix(seconds, ns)
+	return nil
+}
+
+// MarshalJSON will marshall whatsapp HSM message
+func (hm *HsmMessage) MarshalJSON() ([]byte, error) {
+	type Alias HsmMessage
+	aux := &struct {
+		Received float64 `json:"received"`
+		*Alias
+	}{
+		Alias: (*Alias)(hm),
+	}
+	aux.Received = float64(hm.Received.UnixNano()) / nsMultiplier
+	return json.Marshal(aux)
+}
+
 type MenuPayload struct {
 	Menu Menu `json:"menu"`
 }
@@ -236,6 +309,35 @@ type ResponsePayload struct {
 }
 
 type GetAppUserResponse struct {
+	AppUser *AppUser `json:"appUser,omitempty"`
+}
+
+// PreCreateAppUserPayload defines payload for pre-create app user request
+type PreCreateAppUserPayload struct {
+	UserID    string `json:"userId"`
+	Surname   string `json:"surname"`
+	GivenName string `json:"givenName"`
+}
+
+// PreCreateAppUserResponse defines response for pre-create use request
+type PreCreateAppUserResponse struct {
+	AppUser *AppUser `json:"appUser,omitempty"`
+}
+
+// LinkAppConfirmationData defines
+type LinkAppConfirmationData struct {
+	Type string `json:"type"`
+}
+
+// LinkAppUserToChannelPayload will link app user to specified channel
+type LinkAppUserToChannelPayload struct {
+	Type         string                  `json:"type"`
+	Confirmation LinkAppConfirmationData `json:"confirmation"`
+	PhoneNumber  string                  `json:"phoneNumber"`
+}
+
+// LinkAppUserToChannelResponse defines reponse for link app user to channel request
+type LinkAppUserToChannelResponse struct {
 	AppUser *AppUser `json:"appUser,omitempty"`
 }
 

@@ -226,17 +226,17 @@ func TestSendOKResponse(t *testing.T) {
 	assert.NoError(t, err)
 
 	message := &Message{}
-	response, err := sc.Send("", message)
+	response, _, err := sc.Send("", message)
 	assert.Nil(t, response)
 	assert.Error(t, err)
 	assert.EqualError(t, err, ErrUserIDEmpty.Error())
 
-	response, err = sc.Send("TestUser", nil)
+	response, _, err = sc.Send("TestUser", nil)
 	assert.Nil(t, response)
 	assert.Error(t, err)
 	assert.EqualError(t, err, ErrMessageNil.Error())
 
-	response, err = sc.Send("TestUser", message)
+	response, _, err = sc.Send("TestUser", message)
 	assert.Nil(t, response)
 	assert.Error(t, err)
 	assert.EqualError(t, err, ErrMessageRoleEmpty.Error())
@@ -244,7 +244,7 @@ func TestSendOKResponse(t *testing.T) {
 	message = &Message{
 		Role: RoleAppUser,
 	}
-	response, err = sc.Send("TestUser", message)
+	response, _, err = sc.Send("TestUser", message)
 	assert.Nil(t, response)
 	assert.Error(t, err)
 	assert.EqualError(t, err, ErrMessageTypeEmpty.Error())
@@ -253,7 +253,7 @@ func TestSendOKResponse(t *testing.T) {
 		Role: RoleAppUser,
 		Type: MessageTypeText,
 	}
-	response, err = sc.Send("TestUser", message)
+	response, _, err = sc.Send("TestUser", message)
 	assert.NotNil(t, response)
 	assert.NoError(t, err)
 
@@ -295,7 +295,7 @@ func TestSendErrorResponse(t *testing.T) {
 		Role: RoleAppUser,
 		Type: MessageTypeText,
 	}
-	response, err := sc.Send("TestUser", message)
+	response, _, err := sc.Send("TestUser", message)
 	assert.Nil(t, response)
 	assert.Error(t, err)
 
@@ -356,7 +356,7 @@ func TestGetAppUser(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	appUser, err := sc.GetAppUser("123")
+	appUser, _, err := sc.GetAppUser("123")
 	assert.NotNil(t, appUser)
 	assert.NoError(t, err)
 
@@ -410,7 +410,7 @@ func TestUploadAttachment(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	r, err := sc.UploadFileAttachment("fixtures/smooch.png", NewAttachmentUpload("image/png"))
+	r, _, err := sc.UploadFileAttachment("fixtures/smooch.png", NewAttachmentUpload("image/png"))
 	assert.NotNil(t, r)
 	assert.NoError(t, err)
 
@@ -420,7 +420,7 @@ func TestUploadAttachment(t *testing.T) {
 		r.MediaURL,
 	)
 
-	r, err = sc.UploadFileAttachment("fixtures/smooch-not-exists.png", NewAttachmentUpload("image/png"))
+	r, _, err = sc.UploadFileAttachment("fixtures/smooch-not-exists.png", NewAttachmentUpload("image/png"))
 	assert.Nil(t, r)
 	assert.Error(t, err)
 }
@@ -444,7 +444,7 @@ func TestDeleteAttachment(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	err = sc.DeleteAttachment(&Attachment{
+	_, err = sc.DeleteAttachment(&Attachment{
 		MediaURL:  "https://media.smooch.io/conversation/c7f6e6d6c3a637261bd9656f/a77caae4cbbd263a0938eba00016b7c8/test.png",
 		MediaType: "",
 	})

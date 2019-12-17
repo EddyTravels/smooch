@@ -7,7 +7,10 @@ _**Note** : This a modified version version of [EddyTravels/smooch](https://gith
 ## Additional Feature
 
 - Token expiration & its checking.
+- Pre-create app user and link app user to specified channel functionality.
+- Send message in whatsapp HSM format.
 - Renew token functionality whenever token is expired.
+- Support smooch basic auth and JWT auth.
 - Redis support as a centralized storage to store JWT token for supporting autoscaling environment. Use redigo as redis library.
 
 ## Tips
@@ -22,6 +25,9 @@ $ go get -u github.com/kitabisa/smooch
 
 ## Example
 
+Using basic authentication :
+
+
 ```
 import (
 	"os"
@@ -31,6 +37,30 @@ import (
 
 func main() {
     smoochClient, err := smooch.New(smooch.Options{
+        Auth:         smooch.AuthBasic,
+        AppID:        os.Getenv("SMOOCH_APP_ID"),
+        KeyID:        os.Getenv("SMOOCH_KEY_ID"),
+        Secret:       os.Getenv("SMOOCH_SECRET"),
+    })
+
+    if err != nil {
+        panic(err)
+    }
+}
+```
+
+Using JWT authentication :
+
+```
+import (
+	"os"
+
+	"github.com/kitabisa/smooch"
+)
+
+func main() {
+    smoochClient, err := smooch.New(smooch.Options{
+        Auth:         smooch.AuthJWT,
         AppID:        os.Getenv("SMOOCH_APP_ID"),
         KeyID:        os.Getenv("SMOOCH_KEY_ID"),
         Secret:       os.Getenv("SMOOCH_SECRET"),
