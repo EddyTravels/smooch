@@ -299,10 +299,6 @@ func (sc *SmoochClient) PreCreateAppUser(userID, surname, givenName string) (*Ap
 		return nil, nil, ErrUserIDEmpty
 	}
 
-	if surname == "" {
-		return nil, nil, ErrSurnameEmpty
-	}
-
 	if givenName == "" {
 		return nil, nil, ErrGivenNameEmpty
 	}
